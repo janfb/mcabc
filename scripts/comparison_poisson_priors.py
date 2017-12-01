@@ -117,12 +117,22 @@ def poisson_evidence(x, shape, scale, N, log=False):
 
     return result if log else np.exp(result)
 
+def poisson_sum_evidence(x, k, theta, log=True):
+    N = x.size
+    sx = np.sum(x)
+
+    result = -k * np.log(theta * N) - gammaln(k) - gammaln(sx + 1) + gammaln(k + sx) - (k + sx) * np.log(
+        1 + 1. / (theta * N))
+
+    return result if log else np.exp(result)
+
+
 # set prior parameters
 shapes = [0.5, 7.5]
 scales = [1.0, 1.0]
 
-sample_size = 100
-n_samples = 100000
+sample_size = 1
+n_samples = 2000
 
 n_epochs = 500
 n_minibatch = 500
@@ -138,6 +148,7 @@ model_psi, optim_psi, losses = train_psi(X, m, model, optim, lossfun, n_epochs=n
 
 bf_true = []
 bf_predicted = []
+bf_stats =[]
 model_indices = []
 mi_pred = []
 
@@ -175,13 +186,18 @@ for i in range(100):
     e0 = poisson_evidence(samples, shapes[0], scales[0], sample_size, log=True)
     e1 = poisson_evidence(samples, shapes[1], scales[1], sample_size, log=True)
 
+    e0s = poisson_sum_evidence(samples, shapes[0], scales[0])
+    e1s = poisson_sum_evidence(samples, shapes[1], scales[1])
+
     # calculate bf
     log_bftrue = e0 - e1
+    log_bfstats = e0s - e1s
     log_bfpred = np.log(posterior_probs[0]) - np.log(posterior_probs[1])
 
     # append to lists
     bf_predicted.append(log_bfpred)
     bf_true.append(log_bftrue)
+    bf_stats.append(log_bfstats)
     model_indices.append(m_i)
 
 mi_true = np.array(model_indices)
@@ -190,7 +206,7 @@ mi_ana = (np.array(bf_true) < 0.)
 mi_pred = (np.array(bf_predicted) < 0.)
 stats = np.array(stats).squeeze()
 
-plt.figure(figsize=(15, 10))
+plt.figure(figsize=(15, 8))
 
 plt.subplot(211)
 plt.title('The summary stats of the two models are well separated')
@@ -199,14 +215,13 @@ plt.hist(stats[mi_true==1], label='model 1')
 plt.legend()
 
 plt.subplot(212)
-plt.title('Predicted and analytical log Bayes Factor on different scales')
-
-plt.plot(bf_true, label='analytical', color='C0')
-
-plt.plot(bf_predicted, label='predicted', color='C1')
-
+plt.title('Predicted and analytical log Bayes Factor')
+plt.plot(bf_true, label=r'log $BF(x)$')
+plt.plot(bf_stats, label=r'log $BF(s(x))$')
+plt.plot(bf_predicted, '--', label='predicted log BF')
 plt.ylabel('log Bayes factor')
 plt.xlabel('different data sets')
 plt.legend(loc=4)
 
 plt.savefig('../figures/comparison_poisson_priors_N{}M{}.pdf'.format(n_samples, sample_size))
+plt.show()

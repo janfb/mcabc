@@ -158,7 +158,7 @@ def normalize(X, norm=None):
     return (X - xmean) / xstd, (xmean, xstd)
 
 sample_size = 100 # size of toy data
-n_samples = 100000
+n_samples = 200000
 
 n_epochs = 500
 n_minibatch = 500
@@ -195,20 +195,12 @@ post = gamma.pdf(x=thetas, a=out_shape.data.numpy(), scale=out_scale.data.numpy(
 prior = gamma.pdf(x=thetas, a=shape, scale=scale)
 
 # get true posterior
-
-# first calculate the normalization factor, use log for stability
-alpha = shape
-beta = 1 / scale
-evidence = poisson_evidence(X_o, alpha, beta)
-
-# the the normalized posterior
-true_post = posterior_analytical(thetas, X_o, alpha, beta, log=True) - evidence
-#true_post = gamma.pdf(x=thetas, a=(shape + np.sum(X_o)), scale = 1. / (N + scale))
+true_post = gamma.pdf(x=thetas, a=(shape + np.sum(X_o)), scale = 1. / (sample_size + scale))
 
 plt.figure(figsize=(15, 5))
 plt.plot(thetas, post, label='estimated posterior')
 plt.plot(thetas, prior, '--', label='gamma prior')
-plt.plot(thetas, np.exp(true_post), label='true posterior given data')
+plt.plot(thetas, true_post, label='true posterior given data')
 plt.axvline(x=true_lam, label='true theta', linestyle='--', color='r')
 plt.xlabel('theta')
 plt.legend()
