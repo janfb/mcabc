@@ -9,6 +9,16 @@ import scipy
 from scipy.special import gammaln, betaln
 
 
+def log_betafun(a, b):
+    # beta function is defined in terms of gamma as: B(a, b) = gamma(a)gamma(b)/gamma(a + b)
+    return log_gamma(a) + log_gamma(b) - log_gamma(a + b)
+
+
+def beta_pdf(mu, a, b, log=True):
+    result = (a - 1) * torch.log(mu) + (b - 1) * torch.log(1 - mu) - log_betafun(a, b)
+    return result if log else torch.exp(result)
+
+
 def generate_poisson(N, prior):
     # sample from prior
     theta = prior.rvs()
@@ -134,3 +144,16 @@ def get_posterior(model, X_o, thetas, norm):
     post = gamma.pdf(x=thetas, a=out_shape.data.numpy(), scale=out_scale.data.numpy())
 
     return post
+
+
+def beta_mdn_loss(out_shape, out_scale, y):
+    result = beta_pdf(y, out_shape, out_scale, log=True)
+    result = torch.mean(result)  # mean over batch
+    return -result
+
+
+def gamma_mdn_loss(out_shape, out_scale, y):
+    result = gamma_pdf(y, out_shape, out_scale, log=True)
+    result = torch.mean(result)  # mean over batch
+    return -result
+

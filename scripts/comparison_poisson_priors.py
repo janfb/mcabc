@@ -10,18 +10,7 @@ from scipy.stats import gamma
 import scipy
 from scipy.special import gammaln
 
-
-def generate_poisson(N, shape, scale):
-    # sample from prior
-    theta = np.random.gamma(shape=shape, scale=scale)
-    # generate samples
-    x = np.random.poisson(lam=theta, size=N)
-
-    return theta, x
-
-
-def calculate_stats(x):
-    return np.sum(x).astype(float)
+from model_comparison.utils import *
 
 
 def generate_dataset(n_samples, sample_size):
@@ -46,25 +35,6 @@ def generate_dataset(n_samples, sample_size):
         m.append([int(m_i)])
 
     return m, np.array(thetas), np.array(X)
-
-
-def normalize(X, norm=None):
-    if norm is None:
-        xmean = X.mean(axis=0)
-        xstd = X.std(axis=0)
-    else:
-        xmean = norm[0]
-        xstd = norm[1]
-    return (X - xmean) / xstd, (xmean, xstd)
-
-def batch_generator(dataset, batch_size=5):
-    shuffle(dataset)
-    N_full_batches = len(dataset) // batch_size
-    for i in range(N_full_batches):
-        idx_from = batch_size * i
-        idx_to = batch_size * (i + 1)
-        xs, ys = zip(*[(x, y) for x, y in dataset[idx_from:idx_to]])
-        yield xs, ys
 
 class MDN_psi(nn.Module):
 
@@ -105,26 +75,6 @@ def train_psi(X, Y, model, optim, loss_fun, n_epochs=500, n_minibatch=50):
             print("[epoch %04d] loss: %.4f" % (epoch + 1, loss.data[0]))
 
     return model, optim, losses
-
-def poisson_evidence(x, shape, scale, N, log=False):
-    a = shape
-    b = 1. / scale
-
-    x_sum = np.sum(x)
-    log_xfac = np.sum(gammaln(x + 1))
-
-    result = a * np.log(b) - gammaln(a) - log_xfac + gammaln(a + x_sum) - (a + x_sum) * np.log(b + N)
-
-    return result if log else np.exp(result)
-
-def poisson_sum_evidence(x, k, theta, log=True):
-    N = x.size
-    sx = np.sum(x)
-
-    result = -k * np.log(theta * N) - gammaln(k) - gammaln(sx + 1) + gammaln(k + sx) - (k + sx) * np.log(
-        1 + 1. / (theta * N))
-
-    return result if log else np.exp(result)
 
 
 # set prior parameters
