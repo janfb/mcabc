@@ -30,7 +30,7 @@ def generate_poisson(N, prior):
 
 def calculate_stats(x):
     # return [np.sum(x).astype(float), np.std(x).astype(float)]
-    return [np.sum(x).astype(float)]
+    return np.array([np.sum(x).astype(float)])
 
 
 def generate_negbin(N, r, prior):
