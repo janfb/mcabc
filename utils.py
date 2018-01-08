@@ -157,3 +157,74 @@ def gamma_mdn_loss(out_shape, out_scale, y):
     result = torch.mean(result)  # mean over batch
     return -result
 
+def get_resp_mat(y, mus, sigmas, alphas): 
+    """
+    Calculate the matrix of responsibility estimates for EM algorithm given a batch of MoG estimates. 
+    """
+
+    n_data = mus.size()[0]    
+    n_components = mus.size()[1]
+
+    numerator_mat = torch.zeros(n_data, n_components)
+
+    denom = torch.zeros(n_data)
+    
+    # calculate responsibility values for every data point
+    for k in range(n_components): 
+        nume = alphas[:, k] * gauss_pdf(y, mus[:, k], sigmas[:, k], log=False)
+        denom = torch.add(denom, nume)
+        numerator_mat[:, k] = nume
+
+    # add dimension to denominator vector 
+    denom = denom.view(n_data, 1)
+    # expand it to match size with num matrix 
+    denom = denom.repeat(1, n_components)
+    
+    # take the fraction 
+    resp_mat = numerator_mat / denom
+        
+    return resp_mat
+
+def my_log_sum_exp(x, axis=None):
+    """
+    Apply log-sum-exp with subtraction of the largest element to improve numerical stability. 
+    """
+    (x_max, idx) = torch.max(x, dim=axis, keepdim=True)
+    
+    return torch.log(torch.sum(torch.exp(x - x_max), dim=axis, keepdim=True)) + x_max
+    
+def mog_pdf_new(y, mus, sigmas, alphas, log=False):
+    """
+    Calculate the density values of a batch of variates given the corresponding mus, sigmas, alphas. 
+    Use log-sum-exp trick to improve numerical stability. 
+    
+    return the (log)-probabilities of all the entries in the batch. Type: (n_batch, 1)-Tensor
+    """
+    
+    n_data = mus.size()[0]
+    n_components = mus.size()[1]
+    
+    log_probs_mat = Variable(torch.zeros(n_data, n_components))
+    
+    # gather component log probs in matrix with components as columns, rows as data points
+    for k in range(n_components):     
+        mu = mus[:, k].unsqueeze(1)
+        sigma = sigmas[:, k].unsqueeze(1)
+        lprobs = gauss_pdf(y, mu, sigma, log=True)
+        log_probs_mat[:, k] = lprobs
+                   
+    log_probs_batch = my_log_sum_exp(torch.log(alphas) + log_probs_mat, axis=1)
+    
+    if log: 
+        result = log_probs_batch
+    else: 
+        result = torch.exp(log_probs_batch)
+    
+    return result
+
+def gauss_pdf(y, mu, sigma, log=False):
+    result = -0.5*torch.log(2*np.pi*sigma**2) - 1/(2*sigma**2) * (y.expand_as(mu) - mu)**2
+    if log:
+        return result
+    else: 
+        return torch.exp(result)
