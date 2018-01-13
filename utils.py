@@ -30,7 +30,7 @@ def generate_poisson(N, prior):
 
 def calculate_stats(x):
     # return [np.sum(x).astype(float), np.std(x).astype(float)]
-    return np.array([np.sum(x).astype(float)])
+    return np.array([np.mean(x).astype(float)])
 
 
 def generate_negbin(N, r, prior):
@@ -62,23 +62,43 @@ def batch_generator(dataset, batch_size=5):
         yield xs, ys
 
 
-def poisson_evidence(x, k, theta, N, log=False):
+def poisson_evidence(x, k, theta, log=False):
     """
     k : shape parameter for gamma
     theta : scale parameter for gamma
     """
     x_sum = np.sum(x)
+    N = x.size
     log_xfac = np.sum(gammaln([x + 1.]))
 
-    result = - log_xfac - k * np.log(theta) - gammaln(k) + gammaln(k + x_sum) - (k + x_sum) * np.log(N + 1. / theta)
+    result = - log_xfac - k * np.log(theta) - gammaln(k) + gammaln(k + x_sum) - (k + x_sum) * np.log(N + theta**-1)
+
+    return result if log else np.exp(result)
+
+def poisson_sum_evidence(x, k, theta, log=True):
+    N = x.size
+    sx = np.sum(x)
+
+    result = -k * np.log(theta * N) - gammaln(k) - gammaln(sx + 1) + gammaln(k + sx) - (k + sx) * np.log(1 + (theta * N)**-1)
 
     return result if log else np.exp(result)
 
 
-def nbin_evidence(x, a, b, N, r, log=False):
+def nbin_evidence(x, a, b, r, log=False):
+    # NOTE: SOMETHING SEEMS TO BE WRONG HERE! 
+    N = x.size
     x_sum = np.sum(x)
 
     result = betaln(a + N * r, b + x_sum) - betaln(a, b) + np.sum(np.log(scipy.special.binom(x + r - 1, x)))
+
+    return result if log else np.exp(result)
+
+def nbin_sum_evidence(x, a, b, r, log=False):
+    N = x.size
+    sx = np.sum(x)
+    s = N * r
+    
+    result = betaln(a + s, b + sx) - betaln(a, b) + np.log(scipy.special.binom(sx + s - 1, sx))
 
     return result if log else np.exp(result)
 
@@ -118,17 +138,6 @@ def gamma_pdf(x, shape, scale, log=False):
     else:
         return torch.exp(result)
 
-
-def poisson_sum_evidence(x, k, theta, log=True):
-    N = x.size
-    sx = np.sum(x)
-
-    result = -k * np.log(theta * N) - gammaln(k) - gammaln(sx + 1) + gammaln(k + sx) - (k + sx) * np.log(
-        1 + 1. / (theta * N))
-
-    return result if log else np.exp(result)
-
-
 def get_posterior(model, X_o, thetas, norm):
     data = calculate_stats(X_o)
     data, norm = normalize(data, norm)
@@ -157,6 +166,7 @@ def gamma_mdn_loss(out_shape, out_scale, y):
     result = torch.mean(result)  # mean over batch
     return -result
 
+
 def get_resp_mat(y, mus, sigmas, alphas): 
     """
     Calculate the matrix of responsibility estimates for EM algorithm given a batch of MoG estimates. 
@@ -171,7 +181,7 @@ def get_resp_mat(y, mus, sigmas, alphas):
     
     # calculate responsibility values for every data point
     for k in range(n_components): 
-        nume = alphas[:, k] * gauss_pdf(y, mus[:, k], sigmas[:, k], log=False)
+        nume = alphas[:, k] * univariate_normal_pdf(y, mus[:, k], sigmas[:, k], log=False)
         denom = torch.add(denom, nume)
         numerator_mat[:, k] = nume
 
@@ -185,6 +195,7 @@ def get_resp_mat(y, mus, sigmas, alphas):
         
     return resp_mat
 
+
 def my_log_sum_exp(x, axis=None):
     """
     Apply log-sum-exp with subtraction of the largest element to improve numerical stability. 
@@ -192,8 +203,9 @@ def my_log_sum_exp(x, axis=None):
     (x_max, idx) = torch.max(x, dim=axis, keepdim=True)
     
     return torch.log(torch.sum(torch.exp(x - x_max), dim=axis, keepdim=True)) + x_max
-    
-def mog_pdf_new(y, mus, sigmas, alphas, log=False):
+
+
+def univariate_mog_pdf(y, mus, sigmas, alphas, log=False):
     """
     Calculate the density values of a batch of variates given the corresponding mus, sigmas, alphas. 
     Use log-sum-exp trick to improve numerical stability. 
@@ -210,7 +222,7 @@ def mog_pdf_new(y, mus, sigmas, alphas, log=False):
     for k in range(n_components):     
         mu = mus[:, k].unsqueeze(1)
         sigma = sigmas[:, k].unsqueeze(1)
-        lprobs = gauss_pdf(y, mu, sigma, log=True)
+        lprobs = univariate_normal_pdf(y, mu, sigma, log=True)
         log_probs_mat[:, k] = lprobs
                    
     log_probs_batch = my_log_sum_exp(torch.log(alphas) + log_probs_mat, axis=1)
@@ -222,9 +234,74 @@ def mog_pdf_new(y, mus, sigmas, alphas, log=False):
     
     return result
 
+
 def gauss_pdf(y, mu, sigma, log=False):
-    result = -0.5*torch.log(2*np.pi*sigma**2) - 1/(2*sigma**2) * (y.expand_as(mu) - mu)**2
+    return univariate_normal_pdf(y, mu, sigma, log = False)
+
+
+def univariate_normal_pdf(X, mus, sigmas, log=False):
+    """
+    Calculate pdf values for a batch of 1D Gaussian samples.
+
+    Parameters
+    ----------
+    X : Pytorch Varibale containing a Tensor
+        batch of samples, shape (batch_size, 1)
+    mus : Pytorch Varibale containing a Tensor
+        means for every sample, shape (batch_size, 1)
+    sigmas: Pytorch Varibale containing a Tensor
+        standard deviates for every sample, shape (batch_size, ndims, ndims)
+    log: bool
+      if True, log probs are returned
+
+    Returns
+    -------
+    result:  Variable containing a Tensor with shape (batch_size, 1)
+        batch of density values, if log=True log probs
+    """
+    result = -0.5 * torch.log(2 * np.pi * sigmas ** 2) - 1 / (2 * sigmas ** 2) * (X.expand_as(mus) - mus) ** 2
     if log:
         return result
     else: 
+        return torch.exp(result)
+
+
+def multivariate_normal_pdf(X, mus, Us, log=False):
+    """
+    Calculate pdf values for a batch of 2D Gaussian samples given mean and Choleski transform of the precision matrix.
+
+    Parameters
+    ----------
+    X : Pytorch Varibale containing a Tensor
+        batch of samples, shape (batch_size, ndims)
+    mus : Pytorch Varibale containing a Tensor
+        means for every sample, shape (batch_size, ndims)
+    Us: Pytorch Varibale containing a Tensor
+        Choleski transform of precision matrix for every samples, shape (batch_size, ndims, ndims)
+    log: bool
+      if True, log probs are returned
+
+    Returns
+    -------
+    result:  Variable containing a Tensor with shape (batch_size, 1)
+        batch of density values, if log=True log probs
+    """
+
+    # dimension of the Gaussian
+    D = mus.size()[1]
+
+    # get the precision matrices over batches using matrix multiplication: S^-1 = U'U
+    Sin = torch.bmm(torch.transpose(Us, 1, 2), Us)
+
+    # use torch.bmm to calculate probs over batch vectorized
+    log_probs = - 0.5 * torch.sum((X - mus).unsqueeze(-1) * torch.bmm(Sin, (X - mus).unsqueeze(-1)), dim=1)
+    # calculate normalization constant over batch extracting the diagonal of U manually
+    norm_const = (torch.sum(torch.log(Us[:, np.arange(D), np.arange(D)]), -1) - (D / 2) * np.log(2 * np.pi)).unsqueeze(
+        -1)
+
+    result = norm_const + log_probs
+
+    if log:
+        return result
+    else:
         return torch.exp(result)
