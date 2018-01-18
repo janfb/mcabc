@@ -305,3 +305,37 @@ def multivariate_normal_pdf(X, mus, Us, log=False):
         return result
     else:
         return torch.exp(result)
+
+
+def calculate_multivariate_normal_mu_posterior(X, sigma, N, mu_0, sigma_0):
+
+    """
+    Calculate the posterior over the mean parameter mu of a multivariate normal distribution given the data X,
+    the covariance of the data generating distribution and mean and covariance of the Gaussian prior on mu.
+
+    Parameters
+    ----------
+    X : numpy array (N, ndims)
+        batch of samples, shape (batch_size, ndims)
+    sigma:  numpy array (ndims, ndims)
+        covariance underlying the data
+    N : int
+        batch size
+    mu_0: numpy array (ndims, )
+        prior mean
+    sigma_0: numpy array (ndims, ndims)
+        prior covariance matrix
+
+    Returns
+    -------
+    mu_N: numpy array (ndims, )
+        mean of the posterior
+    sigma_N: numpy array (ndims, ndims)
+        covariance matrix of the posterior
+    """
+
+    # formulas from Bishop p92/93
+    sigma_N = np.linalg.inv(np.linalg.inv(sigma_0) + N * np.linalg.inv(sigma))
+    mu_N = sigma_N.dot(N * np.linalg.inv(sigma).dot(X.mean(axis=0)) + np.linalg.inv(sigma_0).dot(mu_0))
+
+    return mu_N, sigma_N
