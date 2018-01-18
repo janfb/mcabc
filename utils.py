@@ -236,7 +236,7 @@ def univariate_mog_pdf(y, mus, sigmas, alphas, log=False):
 
 
 def gauss_pdf(y, mu, sigma, log=False):
-    return univariate_normal_pdf(y, mu, sigma, log = False)
+    return univariate_normal_pdf(y, mu, sigma, log=log)
 
 
 def univariate_normal_pdf(X, mus, sigmas, log=False):
