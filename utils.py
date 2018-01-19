@@ -235,6 +235,53 @@ def univariate_mog_pdf(y, mus, sigmas, alphas, log=False):
     return result
 
 
+def multivariate_mog_pdf(X, mus, Us, alphas, log=False):
+    """
+    Calculate pdf values for a batch of ND values under a mixture of multivariate Gaussians.
+
+    Parameters
+    ----------
+    X : Pytorch Varibale containing a Tensor
+        batch of samples, shape (batch_size, ndims)
+    mus : Pytorch Varibale containing a Tensor
+        means for every sample and mixture component, shape (batch_size, ndims, ncomponents)
+    Us: Pytorch Varibale containing a Tensor
+        upper triangle Choleski transform matrix of the precision matrices of every sample and component
+        shape (batch_size, ncomponents, ndims, ndims)
+    alphas: Pytorch Variable containing a Tensor
+        mixture weights for every sample, shape (batch_size, ncomponents)
+    log: bool
+      if True, log probs are returned
+
+    Returns
+    -------
+    result:  Variable containing a Tensor with shape (batch_size, 1)
+        batch of density values, if log=True log probs
+    """
+
+    # get params
+    n_batch, n_dims, n_components = mus.size()
+
+    # prelocate matrix for log probs of each Gaussian component
+    log_probs_mat = Variable(torch.zeros(n_batch, n_components))
+
+    # take weighted sum over components to get log probs
+    for k in range(n_components):
+        log_probs_mat[:, k] = multivariate_normal_pdf(X=X, mus=mus[:, :, k], Us=Us[:, k, :, :], log=True)
+
+    # now apply the log sum exp trick: sum_k alpha_k * N(Y|mu, sigma) = sum_k exp(log(alpha_k) + log(N(Y| mu, sigma)))
+    # this give the log MoG density over the batch
+    log_probs_batch = my_log_sum_exp(torch.log(alphas) + log_probs_mat, axis=1)  # sum over component axis=1
+
+    # return log or linear density dependent on flag:
+    if log:
+        result = log_probs_batch
+    else:
+        result = torch.exp(log_probs_batch)
+
+    return result
+
+
 def gauss_pdf(y, mu, sigma, log=False):
     return univariate_normal_pdf(y, mu, sigma, log=log)
 
@@ -250,7 +297,7 @@ def univariate_normal_pdf(X, mus, sigmas, log=False):
     mus : Pytorch Varibale containing a Tensor
         means for every sample, shape (batch_size, 1)
     sigmas: Pytorch Varibale containing a Tensor
-        standard deviates for every sample, shape (batch_size, ndims, ndims)
+        standard deviations for every sample, shape (batch_size, 1)
     log: bool
       if True, log probs are returned
 
@@ -277,7 +324,7 @@ def multivariate_normal_pdf(X, mus, Us, log=False):
     mus : Pytorch Varibale containing a Tensor
         means for every sample, shape (batch_size, ndims)
     Us: Pytorch Varibale containing a Tensor
-        Choleski transform of precision matrix for every samples, shape (batch_size, ndims, ndims)
+        Choleski transform of precision matrix for every sample, shape (batch_size, ndims, ndims)
     log: bool
       if True, log probs are returned
 
