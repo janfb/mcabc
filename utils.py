@@ -42,6 +42,7 @@ def generate_negbin(N, r, prior):
 
     return theta, x
 
+
 def normalize(X, norm=None):
     if norm is None:
         xmean = X.mean(axis=0)
@@ -67,6 +68,7 @@ def poisson_evidence(x, k, theta, log=False):
     k : shape parameter for gamma
     theta : scale parameter for gamma
     """
+    # NOTE: SOMETHING SEEMS TO BE WRONG HERE!
     x_sum = np.sum(x)
     N = x.size
     log_xfac = np.sum(gammaln([x + 1.]))
@@ -74,6 +76,7 @@ def poisson_evidence(x, k, theta, log=False):
     result = - log_xfac - k * np.log(theta) - gammaln(k) + gammaln(k + x_sum) - (k + x_sum) * np.log(N + theta**-1)
 
     return result if log else np.exp(result)
+
 
 def poisson_sum_evidence(x, k, theta, log=True):
     N = x.size
@@ -137,6 +140,7 @@ def gamma_pdf(x, shape, scale, log=False):
         return result
     else:
         return torch.exp(result)
+
 
 def get_posterior(model, X_o, thetas, norm):
     data = calculate_stats(X_o)
@@ -386,3 +390,29 @@ def calculate_multivariate_normal_mu_posterior(X, sigma, N, mu_0, sigma_0):
     mu_N = sigma_N.dot(N * np.linalg.inv(sigma).dot(X.mean(axis=0)) + np.linalg.inv(sigma_0).dot(mu_0))
 
     return mu_N, sigma_N
+
+
+def generate_nd_gaussian_dataset(n_samples, sample_size, prior, data_cov=None):
+
+    X = []
+    thetas = []
+    ndims = prior.mean.size
+
+    if data_cov is None:
+        data_cov = np.eye(ndims)
+
+    for i in range(n_samples):
+        # sample from the prior
+        theta = prior.rvs()
+
+        # generate samples with mean from prior and unit variance
+        x = scipy.stats.multivariate_normal.rvs(mean=theta, cov=data_cov, size=sample_size).reshape(sample_size, ndims)
+
+        sx = np.array([np.sum(x, axis=0).astype(float)])
+
+        # as data we append the summary stats
+        X.append(sx)
+        thetas.append([theta])
+
+    return np.array(X).squeeze(), np.array(thetas).squeeze()
+
