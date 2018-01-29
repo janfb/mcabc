@@ -7,6 +7,8 @@ from random import shuffle
 from scipy.stats import gamma, beta, nbinom, poisson
 import scipy
 from scipy.special import gammaln, betaln
+import matplotlib.pyplot as plt
+import os
 
 
 def log_betafun(a, b):
@@ -416,3 +418,38 @@ def generate_nd_gaussian_dataset(n_samples, sample_size, prior, data_cov=None):
 
     return np.array(X).squeeze(), np.array(thetas).squeeze()
 
+
+def save_figure(filename, time_stamp, folder='figures'):
+    plt.savefig(os.path.join('figures', time_stamp + filename + '.png'), dpi=300)
+
+
+def sample_poisson(prior, n_samples, sample_size):
+    thetas = []
+    samples = []
+
+    for sample_idx in range(n_samples):
+        thetas.append(prior.rvs())
+        samples.append(scipy.stats.poisson.rvs(mu=thetas[sample_idx], size=sample_size))
+
+    return np.array(thetas), np.array(samples)
+
+
+def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
+    thetas = []
+    samples = []
+
+    for sample_idx in range(n_samples):
+
+        # for every sample, get a new gamma prior
+        thetas.append([prior1.rvs(), prior2.rvs()])
+        gamma_prior = scipy.stats.gamma(a=thetas[sample_idx][0], scale=thetas[sample_idx][1])
+
+        # now for every data point in the sample, to get NB, sample from that gamma prior into the poisson
+        sample = []
+        for ii in range(sample_size):
+            sample.append(scipy.stats.poisson.rvs(gamma_prior.rvs()))
+
+        # add data set to samples
+        samples.append(sample)
+
+    return np.array(thetas), np.array(samples)
