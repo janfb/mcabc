@@ -514,7 +514,7 @@ def generate_nd_gaussian_dataset(n_samples, sample_size, prior, data_cov=None):
 
 
 def save_figure(filename, time_stamp, folder='figures'):
-    plt.savefig(os.path.join('figures', time_stamp + filename + '.png'), dpi=300)
+    plt.savefig(os.path.join(folder, time_stamp + filename + '.png'), dpi=300)
 
 
 def sample_poisson(prior, n_samples, sample_size):
