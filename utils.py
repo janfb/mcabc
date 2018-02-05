@@ -67,45 +67,139 @@ def batch_generator(dataset, batch_size=5):
 
 def poisson_evidence(x, k, theta, log=False):
     """
-    k : shape parameter for gamma
-    theta : scale parameter for gamma
+    Calculate evidence of a sample x under a Poisson model with Gamma prior.
+
+    E(x) = gamma(k + sx) / ( gamma(k) * theta**k ) * (N + 1/theta)**(-k - sx) / prod x_i!
+
+    Parameters
+    ----------
+    x : array-like
+        batch of samples, shape (batch_size, )
+    k : float
+        shape parameter of the gamma prior
+    theta: float
+        scale parameter of the gamma prior
+    log: bool
+        if True, the log evidence is returned
+
+    Returns
+    -------
+    log_evidence: float
+        the log evidence (if log=True) or the evidence of the data
     """
-    # NOTE: SOMETHING SEEMS TO BE WRONG HERE!
-    x_sum = np.sum(x)
-    N = x.size
-    log_xfac = np.sum(gammaln([x + 1.]))
+    sx = np.sum(x)
+    n_batch = x.size
 
-    result = - log_xfac - k * np.log(theta) - gammaln(k) + gammaln(k + x_sum) - (k + x_sum) * np.log(N + theta**-1)
+    log_evidence = gammaln(k + sx) - (gammaln(k) + k * np.log(theta)) - (k + sx) * np.log(n_batch + theta ** -1) \
+                   - np.sum(gammaln(np.array(x) + 1))
 
-    return result if log else np.exp(result)
+    return log_evidence if log else np.exp(log_evidence)
 
 
 def poisson_sum_evidence(x, k, theta, log=True):
-    N = x.size
+    """
+    Calculate the evidence of the summary statistics of a sample under a Poisson model with Gamma prior.
+    Given a batch of samples calculate the evidence (marginal likelihood) of the sufficient statistics
+    (sum over the sample). Note the difference ot the poisson_evidence() method that calculates the evidence of the
+    whole data sample.
+
+    E(sx) = gamma(k + sx) / ( gamma(k) * (N*theta)**k ) * (1 + 1/(N*theta))**(-k - sx) / (sum x_i)!
+
+    Parameters
+    ----------
+    x : array-like
+        batch of samples, shape (batch_size, )
+    k : float
+        shape parameter of the gamma prior
+    theta: float
+        scale parameter of the gamma prior
+    log: bool
+        if True, the log evidence is returned
+
+    Returns
+    -------
+    log_evidence: float
+        the log evidence (if log=True) or the evidence of the data
+    """
+
+    n_batch = x.size
     sx = np.sum(x)
 
-    result = -k * np.log(theta * N) - gammaln(k) - gammaln(sx + 1) + gammaln(k + sx) - (k + sx) * np.log(1 + (theta * N)**-1)
+    result = -k * np.log(theta * n_batch) - gammaln(k) - gammaln(sx + 1) + gammaln(k + sx) - \
+             (k + sx) * np.log(1 + (theta * n_batch)**-1)
 
     return result if log else np.exp(result)
 
 
-def nbin_evidence(x, a, b, r, log=False):
-    # NOTE: SOMETHING SEEMS TO BE WRONG HERE! 
-    N = x.size
-    x_sum = np.sum(x)
+def nbinom_evidence(x, r, a, b, log=False):
+    """
+    Calculate the evidence of a sample x under a negative binomial model with fixed r and beta prior on the success
+    probability p.
 
-    result = betaln(a + N * r, b + x_sum) - betaln(a, b) + np.sum(np.log(scipy.special.binom(x + r - 1, x)))
+    E(x) = \prod gamma(x_i +r) / ( gamma(x_i + 1) * gamma(r)**N ) * B(a + sx, b + Nr) / B(a, b)
 
-    return result if log else np.exp(result)
+    Parameters
+    ----------
+    x : array-like
+        batch of samples, shape (batch_size, )
+    r : int
+        number of successes of the nbinom process
+    a: float
+        shape parameter alpha of the beta prior
+    b: float
+        shape parameter beta of the beta prior
+    log: bool
+        if True, the log evidence is returned
 
-def nbin_sum_evidence(x, a, b, r, log=False):
+    Returns
+    -------
+    log_evidence: float
+        the log evidence (if log=True) or the evidence of the data
+    """
+    b_batch = x.size
+    sx = np.sum(x)
+
+    fac = np.sum(gammaln(np.array(x) + r) - (gammaln(np.array(x) + 1) + gammaln([r]))) - betaln(a, b)
+    log_evidence = fac + betaln(a + sx, b + b_batch * r)
+
+    return log_evidence if log else np.exp(log_evidence)
+
+
+def nbinom_sum_evidence(x, r, a, b, log=True):
+
+    """
+    Calculate the evidence of a the sufficient statistics sx of a sample x under a negative binomial model with fixed
+    r and beta prior on the success probability p.
+
+    E(sx) = binom(sx + Nr - 1, sx) * B(a + sx, b + Nr) / B(a, b)
+
+    Parameters
+    ----------
+    x : array-like
+        batch of samples, shape (batch_size, )
+    r : int
+        number of successes of the nbinom process
+    a: float
+        shape parameter alpha of the beta prior
+    b: float
+        shape parameter beta of the beta prior
+    log: bool
+        if True, the log evidence is returned
+
+    Returns
+    -------
+    log_evidence: float
+        the log evidence (if log=True) or the evidence of the data
+    """
+
     N = x.size
     sx = np.sum(x)
-    s = N * r
-    
-    result = betaln(a + s, b + sx) - betaln(a, b) + np.log(scipy.special.binom(sx + s - 1, sx))
+    bc = scipy.special.binom(sx + N * r - 1, sx)
 
-    return result if log else np.exp(result)
+    log_evidence = np.log(bc) + betaln(a + sx, b + N * r) - betaln(a, b)
+
+    return log_evidence if log else np.exp(log_evidence)
+
 
 # magical gammaln fun from pyro
 def log_gamma(xx):
