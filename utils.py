@@ -531,6 +531,7 @@ def sample_poisson(prior, n_samples, sample_size):
 def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
     thetas = []
     samples = []
+    lambs = []
 
     for sample_idx in range(n_samples):
 
@@ -540,10 +541,25 @@ def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
 
         # now for every data point in the sample, to get NB, sample from that gamma prior into the poisson
         sample = []
+        ls = []
         for ii in range(sample_size):
-            sample.append(scipy.stats.poisson.rvs(gamma_prior.rvs()))
+            ls.append(gamma_prior.rvs())
+            sample.append(scipy.stats.poisson.rvs(ls[ii]))
 
         # add data set to samples
         samples.append(sample)
+        lambs.append(ls)
 
-    return np.array(thetas), np.array(samples)
+    return np.array(thetas), np.array(samples), np.array(lambs)
+
+def nbinom_pdf(k, r, p): 
+    return scipy.special.binom(k + r - 1, k) * np.power(p, k) * np.power(1-p, r)
+
+def calculate_pprob_from_evidences(pd1, pd2, priors=None): 
+    if priors is None: 
+        # p(m|d) = p(d | m) * p(m) / (sum_ p(d|m_i)p(m))))
+        # because the prior is uniform we just return the normalized evidence: 
+        return pd1 / (pd1 + pd2)
+    else: 
+        # p(m|d) = p(d | m) * p(m) / (sum_ p(d|m_i)p(m))))
+        return pd1 * priors[0] / (pd1 * priors[0] + pd2 * priors[1])
