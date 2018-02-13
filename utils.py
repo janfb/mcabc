@@ -159,8 +159,18 @@ def nbinom_evidence(x, r, a, b, log=False):
     b_batch = x.size
     sx = np.sum(x)
 
-    fac = np.sum(gammaln(np.array(x) + r) - (gammaln(np.array(x) + 1) + gammaln([r]))) - betaln(a, b)
-    log_evidence = fac + betaln(a + sx, b + b_batch * r)
+    fac = np.sum(gammaln(np.array(x) + r) - (gammaln(np.array(x) + 1) + gammaln([r])))
+    log_evidence = fac + betaln(a + sx, b + b_batch * r) - betaln(a, b)
+
+    return log_evidence if log else np.exp(log_evidence)
+
+
+def nbinom_evidence_scipy(x, r, a, b, log=False):
+    b_batch = x.size
+    sx = np.sum(x)
+
+    fac = np.sum(gammaln(np.array(x) + r) - (gammaln(np.array(x) + 1) + gammaln([r])))
+    log_evidence = fac + betaln(a + b_batch * r, b + sx) - betaln(a, b)
 
     return log_evidence if log else np.exp(log_evidence)
 
@@ -552,8 +562,12 @@ def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
 
     return np.array(thetas), np.array(samples), np.array(lambs)
 
-def nbinom_pdf(k, r, p): 
+
+def nbinom_pdf(k, r, p):
+    k = k.squeeze()
+
     return scipy.special.binom(k + r - 1, k) * np.power(p, k) * np.power(1-p, r)
+
 
 def calculate_pprob_from_evidences(pd1, pd2, priors=None): 
     if priors is None: 
