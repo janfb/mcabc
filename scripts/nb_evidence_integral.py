@@ -87,8 +87,8 @@ def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
 
 
 n_steps = 1000
-sample_size = 2
-n_samples = 1
+sample_size = 3
+n_samples = 3
 seed = 1
 time_stamp = time.strftime('%Y%m%d%H%M_')
 figure_folder = '../figures/'
@@ -126,18 +126,10 @@ ks = np.linspace(scipy.stats.gamma.ppf(1e-8, a=k2),
 thetas = np.linspace(scipy.stats.gamma.ppf(1e-8, a=k3),
                      scipy.stats.gamma.ppf(1 - 1e-8, a=k3), n_steps)
 
-# ml1 = nb_evidence_integral(X, ks, thetas, integrant=nb_evidence_integrant_direct, log=False)
-# print(ml1)
-# k, theta = ks[10], thetas[10]
-# p = theta / (1 + theta)
-#
-# print(nbinom_indirect_pmf(X.squeeze(), k, theta))
-# print(nbinom_pdf(X.squeeze(), k, p))
+evianas = []
+for x in X:
+    (eviana, err) = scipy.integrate.dblquad(func=nb_evidence_integrant_direct, a=thetas[0], b=thetas[-1],
+                                            gfun=lambda x: ks[0], hfun=lambda x: ks[-1], args=[x])
+    evianas.append(eviana)
 
-ml2 = scipy.integrate.dblquad(func=nb_evidence_integrant_direct, a=thetas[0], b=thetas[-1],
-                              gfun=lambda x: ks[0], hfun=lambda x: ks[-1], args=X)
-print(ml2)
-
-ml3 = scipy.integrate.dblquad(func=nb_evidence_integrant_indirect, a=thetas[0], b=thetas[-1],
-                              gfun=lambda x: ks[0], hfun=lambda x: ks[-1], args=X)
-print(ml3)
+print(evianas)
