@@ -2,8 +2,6 @@ import numpy as np
 import scipy.stats
 import scipy.integrate
 import time
-from model_comparison.utils import *
-
 
 def nb_evidence_integral(x, ks, thetas, integrant, log=False):
 
@@ -56,6 +54,36 @@ def nb_evidence_integrant_direct(k, theta, x):
     value = np.log(nbinom_pdf(x, r, p)).sum() + np.log(pk) + np.log(pp)
 
     return np.exp(value)
+
+def nbinom_pdf(k, r, p):
+    k = k.squeeze()
+
+    return scipy.special.binom(k + r - 1, k) * np.power(p, k) * np.power(1-p, r)
+
+
+def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
+    thetas = []
+    samples = []
+    lambs = []
+
+    for sample_idx in range(n_samples):
+
+        # for every sample, get a new gamma prior
+        thetas.append([prior1.rvs(), prior2.rvs()])
+        gamma_prior = scipy.stats.gamma(a=thetas[sample_idx][0], scale=thetas[sample_idx][1])
+
+        # now for every data point in the sample, to get NB, sample from that gamma prior into the poisson
+        sample = []
+        ls = []
+        for ii in range(sample_size):
+            ls.append(gamma_prior.rvs())
+            sample.append(scipy.stats.poisson.rvs(ls[ii]))
+
+        # add data set to samples
+        samples.append(sample)
+        lambs.append(ls)
+
+    return np.array(thetas), np.array(samples), np.array(lambs)
 
 
 n_steps = 1000
