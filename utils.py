@@ -563,10 +563,90 @@ def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
     return np.array(thetas), np.array(samples), np.array(lambs)
 
 
-def nbinom_pdf(k, r, p):
-    k = k.squeeze()
+def nbinom_pmf(k, r, p, axis=-1):
+    """
+    Calculate pmf values according to Wikipedia definition of the negative binomial distribution:
+    p(X=x | r, p = (x + r - 1)choose(x) p^x (1 - p)^r
+    """
 
     return scipy.special.binom(k + r - 1, k) * np.power(p, k) * np.power(1-p, r)
+
+
+def nbinom_pmf_indirect(x, k, theta):
+    """
+    Calculate pmf values using the indirect sampling scheme via the Poisson-Gamma mixture. It is
+
+        p(X=x | k, theta) = \int poisson(x | \lambda) gamma(\lambda | k, \theta) d\lambda
+
+    The integral over \lambda is calculated using the double integration method from scipy.integrate.dbpquad
+    """
+
+    # set the gamma mixture pdf
+    gamma_pdf = scipy.stats.gamma(a=k, scale=theta)
+
+    # define integrant function: poisson(x | \lambda) gamma(\lambda | k, \theta)
+    fun = lambda lam, ix: scipy.stats.poisson.pmf(ix, mu=lam) * scipy.stats.gamma.pdf(lam, a=k, scale=theta)
+
+    # for every sample
+    pmf_values = []
+    for ix in x.squeeze():
+        # integrate over all lambdas
+        pmf_value, rr = scipy.integrate.quad(func=fun,
+                                             a=float(gamma_pdf.ppf(1e-8)),
+                                             b=float(gamma_pdf.ppf(1 - 1e-8)),
+                                             args=(k, theta, ix), epsrel=1e-10)
+        pmf_values.append(pmf_value)
+
+    return pmf_values
+
+
+def nb_evidence_grid_integral(x, prior_k, prior_theta, ks, thetas, integrant, log=False):
+
+    k_grid, th_grid = np.meshgrid(ks, thetas)
+
+    grid_values = np.zeros((thetas.size, ks.size))
+
+    for i in range(thetas.shape[0]):
+        for j in range(ks.shape[0]):
+            grid_values[i, j] = integrant(k_grid[i, j], th_grid[i, j], x, prior_k, prior_theta)
+
+    integral = np.trapz(np.trapz(grid_values, x=thetas, axis=0), x=ks, axis=0)
+
+    return np.log(integral) if log else integral
+
+
+def nb_evidence_integrant_indirect(k, theta, x, prior_k, prior_theta):
+    """
+    Negative Binomial marginal likelihood integrant for the indirect sampling method via Poisson-Gamma mixture.
+    """
+
+    # get the prior pdf values for k and theta
+    pk = prior_k.pdf(k)
+    ptheta = prior_theta.pdf(theta)
+
+    # evaluate the pmf and take the product (log sum) over samples, multiply with prior pds values
+    value = np.log(nbinom_pmf_indirect(x, k, theta)).sum() + np.log(pk) + np.log(ptheta)
+
+    # return exponential
+    return np.exp(value)
+
+
+def nb_evidence_integrant_direct(k, theta, x, prior_k, prior_theta):
+    """
+    Negative Binomial marginal likelihood integrant: NB likelihood times prior pds values for given set of prior params
+    """
+    # set prior params for direct NB given params for indirect Poisson-Gamma mixture (Gamma priors on k and theta)
+    r = k
+    p = theta / (1 + theta)
+
+    # get pdf values
+    pk = prior_k.pdf(k)
+    # do change of variables or not?
+    pp = np.power(1 - p, -2) * prior_theta.pdf(theta)
+
+    value = np.log(nbinom_pmf(x, r, p)).sum() + np.log(pk) + np.log(pp)
+
+    return np.exp(value)
 
 
 def calculate_pprob_from_evidences(pd1, pd2, priors=None): 
