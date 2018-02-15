@@ -527,9 +527,12 @@ def save_figure(filename, time_stamp, folder='figures'):
     plt.savefig(os.path.join(folder, time_stamp + filename + '.png'), dpi=300)
 
 
-def sample_poisson(prior, n_samples, sample_size):
+def sample_poisson(prior, n_samples, sample_size, seed=None):
     thetas = []
     samples = []
+
+    # set the seed
+    np.random.seed(seed)
 
     for sample_idx in range(n_samples):
         thetas.append(prior.rvs())
@@ -538,10 +541,13 @@ def sample_poisson(prior, n_samples, sample_size):
     return np.array(thetas), np.array(samples)
 
 
-def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
+def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size, seed=None):
     thetas = []
     samples = []
     lambs = []
+
+    # set the seed
+    np.random.seed(seed)
 
     for sample_idx in range(n_samples):
 
@@ -563,7 +569,7 @@ def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
     return np.array(thetas), np.array(samples), np.array(lambs)
 
 
-def nbinom_pmf(k, r, p, axis=-1):
+def nbinom_pmf(k, r, p):
     """
     Calculate pmf values according to Wikipedia definition of the negative binomial distribution:
     p(X=x | r, p = (x + r - 1)choose(x) p^x (1 - p)^r
