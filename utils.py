@@ -594,7 +594,7 @@ def nbinom_pmf_indirect(x, k, theta):
         pmf_value, rr = scipy.integrate.quad(func=fun,
                                              a=float(gamma_pdf.ppf(1e-8)),
                                              b=float(gamma_pdf.ppf(1 - 1e-8)),
-                                             args=(k, theta, ix), epsrel=1e-10)
+                                             args=[ix], epsrel=1e-10)
         pmf_values.append(pmf_value)
 
     return pmf_values
@@ -631,18 +631,16 @@ def nb_evidence_integrant_indirect(k, theta, x, prior_k, prior_theta):
     return np.exp(value)
 
 
-def nb_evidence_integrant_direct(k, theta, x, prior_k, prior_theta):
+def nb_evidence_integrant_direct(r, p, x, prior_k, prior_theta):
     """
     Negative Binomial marginal likelihood integrant: NB likelihood times prior pds values for given set of prior params
     """
     # set prior params for direct NB given params for indirect Poisson-Gamma mixture (Gamma priors on k and theta)
-    r = k
-    p = theta / (1 + theta)
 
     # get pdf values
-    pk = prior_k.pdf(k)
+    pk = prior_k.pdf(r)
     # do change of variables or not?
-    pp = np.power(1 - p, -2) * prior_theta.pdf(theta)
+    pp = np.power(1 - p, -2) * prior_theta.pdf(p / (1 - p))
 
     value = np.log(nbinom_pmf(x, r, p)).sum() + np.log(pk) + np.log(pp)
 
