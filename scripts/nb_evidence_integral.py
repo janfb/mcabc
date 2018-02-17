@@ -34,6 +34,12 @@ def nbinom_indirect_pmf(x, k, theta):
     return pmf_values
 
 
+def nbinom_pmf(k, r, p):
+    k = k.squeeze()
+    res = scipy.special.binom(k + r - 1, k) * np.power(p, k) * np.power(1-p, r)
+    return res
+
+
 def nb_evidence_integrant_indirect(k, theta, x):
     pk = prior_k.pdf(k)
     ptheta = prior_theta.pdf(theta)
@@ -43,25 +49,23 @@ def nb_evidence_integrant_indirect(k, theta, x):
     return np.exp(value)
 
 
-def nb_evidence_integrant_direct(k, theta, x):
-    r = k
-    p = theta / (1 + theta)
+def nb_evidence_integrant_direct(r, p, x):
 
-    pk = prior_k.pdf(k)
-    # pp = prior_theta.pdf(theta)
-    pp = np.power(1 - p, -2) * prior_theta.pdf(theta)
+    # get prior pdf values
+    pk = prior_k.pdf(r)
+    pp = np.power(1 - p, -2) * prior_theta.pdf(p / (1 - p))
 
-    value = np.log(nbinom_pdf(x, r, p)).sum() + np.log(pk) + np.log(pp)
+    # take product (log sum) over samples and weight with prior probs
+    value = np.log(nbinom_pmf(x, r, p)).sum() + np.log(pk) + np.log(pp)
 
     return np.exp(value)
 
-def nbinom_pdf(k, r, p):
-    k = k.squeeze()
 
-    return scipy.special.binom(k + r - 1, k) * np.power(p, k) * np.power(1-p, r)
+def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size, seed=None):
 
+    # set the seed
+    np.random.seed(seed)
 
-def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
     thetas = []
     samples = []
     lambs = []
@@ -88,7 +92,7 @@ def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size):
 
 n_steps = 1000
 sample_size = 3
-n_samples = 3
+n_samples = 1
 seed = 1
 time_stamp = time.strftime('%Y%m%d%H%M_')
 figure_folder = '../figures/'
@@ -116,20 +120,31 @@ prior_k = scipy.stats.gamma(a=k2, scale=theta2)
 prior_theta = scipy.stats.gamma(a=k3, scale=theta3)
 
 # draw sample(s)
-params_nb, X, lambs = sample_poisson_gamma_mixture(prior_k, prior_theta, n_samples, sample_size)
+params_nb, X, lambs = sample_poisson_gamma_mixture(prior_k, prior_theta, n_samples, sample_size, seed=seed)
 
 # set up a grid of values around the priors
 # take grid over the whole range of the priors
-ks = np.linspace(scipy.stats.gamma.ppf(1e-8, a=k2),
-                 scipy.stats.gamma.ppf(1 - 1e-8, a=k2), n_steps)
+k0 = scipy.stats.gamma.ppf(1e-8, a=k2)
+k1 = scipy.stats.gamma.ppf(1 - 1e-8, a=k2)
 
-thetas = np.linspace(scipy.stats.gamma.ppf(1e-8, a=k3),
-                     scipy.stats.gamma.ppf(1 - 1e-8, a=k3), n_steps)
+theta0 = scipy.stats.gamma.ppf(1e-8, a=k3)
+theta1 = scipy.stats.gamma.ppf(1 - 1e-8, a=k3)
+
+evianas = []
+
+for x in X:
+    (eviana, err) = scipy.integrate.dblquad(func=nb_evidence_integrant_direct,
+                                            a=theta0 / (1 + theta0),
+                                            b=theta1 / (1 + theta1),
+                                            gfun=lambda x: k0, hfun=lambda x: k1, args=[x])
+    evianas.append(eviana)
+
+print(evianas)
 
 evianas = []
 for x in X:
-    (eviana, err) = scipy.integrate.dblquad(func=nb_evidence_integrant_direct, a=thetas[0], b=thetas[-1],
-                                            gfun=lambda x: ks[0], hfun=lambda x: ks[-1], args=[x])
+    (eviana, err) = scipy.integrate.dblquad(func=nb_evidence_integrant_indirect, a=theta0, b=theta1,
+                                            gfun=lambda x: k0, hfun=lambda x: k1, args=[x])
     evianas.append(eviana)
 
 print(evianas)
