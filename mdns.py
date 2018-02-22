@@ -29,10 +29,10 @@ class Trainer:
 
             for j, (x_batch, y_batch) in enumerate(bgen):
                 x_var = Variable(torch.Tensor(x_batch))
-                y_var = Variable(torch.Tensor(y_batch))
+                y_var = Variable(torch.LongTensor(y_batch))
 
                 model_params = self.model(x_var)
-                loss = self.model.loss(y_var, model_params)
+                loss = self.model.loss(model_params, y_var)
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -58,7 +58,7 @@ class Trainer:
         model_params = self.model(samples)
 
 
-class pytorchMultivariateMoG:
+class PytorchMultivariateMoG:
 
     def __init__(self, mus, Us, alphas):
 
@@ -106,7 +106,7 @@ class pytorchMultivariateMoG:
             U = self.Us[0, k,].data.numpy()
             # get cov from Choleski transform
             cov = np.linalg.inv(U.T.dot(U))
-            # add to result, weighted with alpha
+                # add to result, weighted with alpha
             p_samples += alpha * scipy.stats.multivariate_normal.pdf(x=samples, mean=mean, cov=cov)
 
         return p_samples
@@ -168,13 +168,31 @@ class MultivariateMogMDN(nn.Module):
 
         return (out_mu, U_mat, out_alpha)
 
-    def loss(self, y, model_params):
+    def loss(self, model_params, y):
 
         mu, U, alpha = model_params
 
-        batch_mog = pytorchMultivariateMoG(mu, U, alpha)
+        batch_mog = PytorchMultivariateMoG(mu, U, alpha)
         result = batch_mog.pdf(y, log=True)
 
         result = torch.mean(result)  # mean over batch
 
         return -result
+
+
+class ClassificationSingleLayerMDN(nn.Module):
+
+    def __init__(self, ndim_input=2, ndim_output=2, n_hidden=5):
+        super(ClassificationSingleLayerMDN, self).__init__()
+        self.fc_in = nn.Linear(ndim_input, n_hidden)
+        self.tanh = nn.Tanh()
+        self.m_out = nn.Linear(n_hidden, ndim_output)
+
+        self.loss = nn.CrossEntropyLoss()
+
+    def forward(self, x):
+        out = self.fc_in(x)
+        act = self.tanh(out)
+        out_m = self.m_out(act)
+
+        return out_m
