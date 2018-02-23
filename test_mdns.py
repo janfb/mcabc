@@ -88,7 +88,7 @@ class TestMDNs(TestCase):
                 theta, x = sample_poisson(prior_lam, 1, sample_size)
             else:
                 # sample poisson
-                theta, x, lambs = sample_poisson_gamma_mixture(prior_k, prior_theta, 1, sample_size)
+                theta, x = sample_poisson_gamma_mixture(prior_k, prior_theta, 1, sample_size)
 
             # calculate mean and var as summary stats
             X.append([np.mean(x), np.var(x)])

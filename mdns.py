@@ -56,11 +56,15 @@ class Trainer:
 
     def predict(self, data, samples):
 
+        raise NotImplementedError
+
         assert self.trained, 'You need to train the network before predicting'
         assert(isinstance(samples, Variable)), 'samples must be in torch Variable'
         assert samples.size()[1] == self.model.ndims, 'samples must be 2D matrix with (batch_size, ndims)'
 
+
         model_params = self.model(samples)
+
 
 
 class PytorchMultivariateMoG:
@@ -189,11 +193,13 @@ class ClassificationSingleLayerMDN(nn.Module):
 
     def __init__(self, ndim_input=2, ndim_output=2, n_hidden=5):
         super(ClassificationSingleLayerMDN, self).__init__()
+
         self.fc_in = nn.Linear(ndim_input, n_hidden)
         self.tanh = nn.Tanh()
         self.m_out = nn.Linear(n_hidden, ndim_output)
 
         self.loss = nn.CrossEntropyLoss()
+        self.softmax = nn.Softmax(dim=0)
 
     def forward(self, x):
         out = self.fc_in(x)

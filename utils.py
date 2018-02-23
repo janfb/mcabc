@@ -6,6 +6,7 @@ from torch.autograd import Variable
 from random import shuffle
 from scipy.stats import gamma, beta, nbinom, poisson
 import scipy
+import scipy.integrate
 from scipy.special import gammaln, betaln
 import matplotlib.pyplot as plt
 import os
@@ -33,6 +34,11 @@ def generate_poisson(N, prior):
 def calculate_stats(x):
     # return [np.sum(x).astype(float), np.std(x).astype(float)]
     return np.array([np.mean(x).astype(float)])
+
+
+def calculate_stats_toy_examples(x):
+
+    return np.array([np.mean(x, axis=1), np.var(x, axis=1)]).reshape(x.shape[0], 2)
 
 
 def generate_negbin(N, r, prior):
@@ -535,7 +541,7 @@ def sample_poisson(prior, n_samples, sample_size, seed=None):
     np.random.seed(seed)
 
     # generate a seeded list of random states
-    random_states = np.random.randint(low=0, size=n_samples)
+    random_states = np.random.randint(low=0, high=1000, size=n_samples)
 
     for sample_idx in range(n_samples):
         thetas.append(prior.rvs())
@@ -553,7 +559,7 @@ def sample_poisson_gamma_mixture(prior_k, prior_theta, n_samples, sample_size, s
     np.random.seed(seed)
 
     # generate a seeded list of random states
-    random_states = np.random.randint(low=0, size=n_samples)
+    random_states = np.random.randint(low=0, high=1000, size=n_samples)
 
     for sample_idx in range(n_samples):
 
@@ -652,11 +658,11 @@ def nb_evidence_integrant_direct(r, p, x, prior_k, prior_theta):
     # set prior params for direct NB given params for indirect Poisson-Gamma mixture (Gamma priors on k and theta)
 
     # get pdf values
-    pk = prior_k.pdf(r)
+    pr = prior_k.pdf(r)
     # do change of variables or not?
     pp = np.power(1 - p, -2) * prior_theta.pdf(p / (1 - p))
 
-    value = np.log(nbinom_pmf(x, r, p)).sum() + np.log(pk) + np.log(pp)
+    value = np.log(nbinom_pmf(x, r, p)).sum() + np.log(pr) + np.log(pp)
 
     return np.exp(value)
 
@@ -679,7 +685,7 @@ def sample_poisson_gamma_mixture_matched_means(prior1, lambs, n_samples, sample_
     np.random.seed(seed)
 
     # generate a seeded list of random states
-    random_states = np.random.randint(low=0, size=n_samples)
+    random_states = np.random.randint(low=0, high=1000, size=n_samples)
 
     for sample_idx in range(n_samples):
 
@@ -705,7 +711,7 @@ def sample_poisson_gamma_mixture_matched_means(prior1, lambs, n_samples, sample_
     return np.array(thetas), np.array(samples)
 
 
-def generate_poisson_nb_data_set(n_samples, sample_size, prior_lam, prior_k, prior_theta, norm=None, seed=None):
+def generate_poisson_nb_data_set(n_samples, sample_size, prior_lam, prior_k, prior_theta, seed=None):
 
     lambs, X1 = sample_poisson(prior_lam, int(n_samples / 2), sample_size, seed=seed)
     thetas, X2 = sample_poisson_gamma_mixture(prior_k, prior_theta, int(n_samples / 2), sample_size, seed=seed)
@@ -722,10 +728,27 @@ def generate_poisson_nb_data_set(n_samples, sample_size, prior_lam, prior_k, pri
     X = X[shuffle_indices,]
     m = m[shuffle_indices].tolist()
 
-    # calculate summary stats
-    X = np.vstack((X.mean(axis=1), X.var(axis=1))).T
+    return X, m
 
-    # normalize
-    X, norm = normalize(X, norm=norm)
 
-    return X, m, norm
+def calculate_nb_evidence(x, k_k, theta_k, k_theta, theta_theta, log=False):
+    # set up a grid of values around the priors
+    # take grid over the whole range of the priors
+
+    k_start = scipy.stats.gamma.ppf(1e-8, a=k_k)
+    k_end = scipy.stats.gamma.ppf(1 - 1e-8, a=k_k)
+
+    theta_start = scipy.stats.gamma.ppf(1e-8, a=k_theta)
+    theta_end = scipy.stats.gamma.ppf(1 - 1e-8, a=k_theta)
+
+    # set priors
+    prior_k = scipy.stats.gamma(a=k_k, scale=theta_k)
+    prior_theta = scipy.stats.gamma(a=k_theta, scale=theta_theta)
+
+    (evidence, err) = scipy.integrate.dblquad(func=nb_evidence_integrant_direct,
+                                           a=theta_start / (1 + theta_start),
+                                           b=theta_end / (1 + theta_end),
+                                           gfun=lambda x: k_start, hfun=lambda x: k_end,
+                                           args=[x, prior_k, prior_theta])
+
+    return np.log(evidence) if log else evidence
