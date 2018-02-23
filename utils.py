@@ -534,39 +534,47 @@ def sample_poisson(prior, n_samples, sample_size, seed=None):
     # set the seed
     np.random.seed(seed)
 
+    # generate a seeded list of random states
+    random_states = np.random.randint(low=0, size=n_samples)
+
     for sample_idx in range(n_samples):
         thetas.append(prior.rvs())
-        samples.append(scipy.stats.poisson.rvs(mu=thetas[sample_idx], size=sample_size))
+        samples.append(scipy.stats.poisson.rvs(mu=thetas[sample_idx], size=sample_size,
+                                               random_state=random_states[sample_idx]))
 
     return np.array(thetas), np.array(samples)
 
 
-def sample_poisson_gamma_mixture(prior1, prior2, n_samples, sample_size, seed=None):
+def sample_poisson_gamma_mixture(prior_k, prior_theta, n_samples, sample_size, seed=None):
     thetas = []
     samples = []
-    lambs = []
 
     # set the seed
     np.random.seed(seed)
 
+    # generate a seeded list of random states
+    random_states = np.random.randint(low=0, size=n_samples)
+
     for sample_idx in range(n_samples):
 
+        # set random state
+        rs = random_states[sample_idx]
         # for every sample, get a new gamma prior
-        thetas.append([prior1.rvs(), prior2.rvs()])
-        gamma_prior = scipy.stats.gamma(a=thetas[sample_idx][0], scale=thetas[sample_idx][1])
+        thetas.append([prior_k.rvs(random_state=rs), prior_theta.rvs(random_state=rs)])
+        lambdas_from_gamma = scipy.stats.gamma.rvs(a=thetas[sample_idx][0], scale=thetas[sample_idx][1],
+                                                   size=sample_size, random_state=rs)
 
         # now for every data point in the sample, to get NB, sample from that gamma prior into the poisson
         sample = []
-        ls = []
         for ii in range(sample_size):
-            ls.append(gamma_prior.rvs())
-            sample.append(scipy.stats.poisson.rvs(ls[ii]))
+
+            # sample from poisson with lambdas sampled from gamma
+            sample.append(scipy.stats.poisson.rvs(lambdas_from_gamma[ii]))
 
         # add data set to samples
         samples.append(sample)
-        lambs.append(ls)
 
-    return np.array(thetas), np.array(samples), np.array(lambs)
+    return np.array(thetas), np.array(samples)
 
 
 def nbinom_pmf(k, r, p):
@@ -661,3 +669,63 @@ def calculate_pprob_from_evidences(pd1, pd2, priors=None):
     else: 
         # p(m|d) = p(d | m) * p(m) / (sum_ p(d|m_i)p(m))))
         return pd1 * priors[0] / (pd1 * priors[0] + pd2 * priors[1])
+
+
+def sample_poisson_gamma_mixture_matched_means(prior1, lambs, n_samples, sample_size, seed=None):
+    thetas = []
+    samples = []
+
+    # set the seed
+    np.random.seed(seed)
+
+    # generate a seeded list of random states
+    random_states = np.random.randint(low=0, size=n_samples)
+
+    for sample_idx in range(n_samples):
+
+        # get random state
+        rs = random_states[sample_idx]
+
+        # for every sample, get a new gamma prior
+        r = prior1.rvs(random_state=rs)
+        theta = lambs[sample_idx] / r
+        thetas.append([r, theta])
+        gamma_prior = scipy.stats.gamma(a=thetas[sample_idx][0], scale=thetas[sample_idx][1])
+        lambdas_from_gamma = scipy.stats.gamma.rvs(a=thetas[sample_idx][0], scale=thetas[sample_idx][1],
+                                                   size=sample_size, random_state=rs)
+
+        # now for every data point in the sample, to get NB, sample from that gamma prior into the poisson
+        sample = []
+        for ii in range(sample_size):
+            sample.append(scipy.stats.poisson.rvs(lambdas_from_gamma[ii]))
+
+        # add data set to samples
+        samples.append(sample)
+
+    return np.array(thetas), np.array(samples)
+
+
+def generate_poisson_nb_data_set(n_samples, sample_size, prior_lam, prior_k, prior_theta, norm=None, seed=None):
+
+    lambs, X1 = sample_poisson(prior_lam, int(n_samples / 2), sample_size, seed=seed)
+    thetas, X2 = sample_poisson_gamma_mixture(prior_k, prior_theta, int(n_samples / 2), sample_size, seed=seed)
+
+    # join data
+    X = np.vstack((X1, X2))
+
+    # define model indices
+    m = np.hstack((np.zeros(X1.shape[0]), np.ones(X2.shape[0]))).squeeze().astype(int)
+
+    # shuffle data
+    shuffle_indices = np.arange(n_samples)
+    np.random.shuffle(shuffle_indices)
+    X = X[shuffle_indices,]
+    m = m[shuffle_indices].tolist()
+
+    # calculate summary stats
+    X = np.vstack((X.mean(axis=1), X.var(axis=1))).T
+
+    # normalize
+    X, norm = normalize(X, norm=norm)
+
+    return X, m, norm
