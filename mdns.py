@@ -9,7 +9,7 @@ import scipy.stats
 
 class Trainer:
 
-    def __init__(self, model, optimizer=None, verbose=False):
+    def __init__(self, model, optimizer=None, classification=False, verbose=False):
 
         self.model = model
         self.optimizer = torch.optim.Adam(model.parameters(), lr=0.01) if optimizer is None else optimizer
@@ -18,6 +18,11 @@ class Trainer:
 
         self.verbose = verbose
         self.trained = False
+
+        if classification:
+            self.target_type = torch.LongTensor
+        else:
+            self.target_type = torch.Tensor
 
     def train(self, X, Y, n_epochs=500, n_minibatch=50):
         dataset_train = [(x, y) for x, y in zip(X, Y)]
@@ -29,7 +34,7 @@ class Trainer:
 
             for j, (x_batch, y_batch) in enumerate(bgen):
                 x_var = Variable(torch.Tensor(x_batch))
-                y_var = Variable(torch.LongTensor(y_batch))
+                y_var = Variable(self.target_type(y_batch))
 
                 model_params = self.model(x_var)
                 loss = self.model.loss(model_params, y_var)
@@ -40,7 +45,7 @@ class Trainer:
 
                 loss_trace.append(loss.data.numpy())
 
-            if (epoch + 1) % 10 == 0 and self.verbose:
+            if (epoch + 1) % 100 == 0 and self.verbose:
                 print("[epoch %04d] loss: %.4f" % (epoch + 1, loss.data[0]))
 
         self.loss_trace = loss_trace
