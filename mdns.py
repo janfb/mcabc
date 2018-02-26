@@ -1,10 +1,10 @@
 import numpy as np
+import scipy.stats
 import torch
 import torch.nn as nn
 
 from torch.autograd import Variable
-from utils import multivariate_normal_pdf, my_log_sum_exp, batch_generator
-import scipy.stats
+from model_comparison.utils import multivariate_normal_pdf, my_log_sum_exp, batch_generator
 
 
 class Trainer:
@@ -66,6 +66,70 @@ class Trainer:
         model_params = self.model(samples)
 
 
+class PytorchUnivariateMoG:
+
+    def __init__(self, mus, sigmas, alphas):
+
+        assert isinstance(mus, Variable), 'all inputs need to be pytorch Variable objects'
+
+        self.mus = mus
+        self.sigmas = sigmas
+        self.alphas = alphas
+
+        self.nbatch, self.n_components = mus.size()
+
+    def pdf(self, y, log=True):
+        """
+        Calculate the density values of a batch of variates given the corresponding mus, sigmas, alphas.
+        Use log-sum-exp trick to improve numerical stability.
+
+        return the (log)-probabilities of all the entries in the batch. Type: (n_batch, 1)-Tensor
+        """
+
+        n_data, n_components = self.mus.size()
+
+        log_probs_mat = Variable(torch.zeros(n_data, n_components))
+
+        # gather component log probs in matrix with components as columns, rows as data points
+        for k in range(n_components):
+            mu = self.mus[:, k].unsqueeze(1)
+            sigma = self.sigmas[:, k].unsqueeze(1)
+            lprobs = self.normal_pdf(y.unsqueeze(1), mu, sigma, log=True)
+            log_probs_mat[:, k] = lprobs
+
+        log_probs_batch = my_log_sum_exp(torch.log(self.alphas) + log_probs_mat, axis=1)
+
+        if log:
+            result = log_probs_batch
+        else:
+            result = torch.exp(log_probs_batch)
+
+        return result
+
+    def eval_numpy(self, samples):
+        # eval existing posterior for some params values and return pdf values in numpy format
+
+        sample_shape = samples.shape[:-1]
+        p_samples = np.zeros(sample_shape)
+
+        # for every component
+        for k in range(self.n_components):
+            alpha = self.alphas[0, k].data.numpy()
+            mean = self.mus[0, k].data.numpy()
+            sigma = self.sigmas[0, k].data.numpy()
+                # add to result, weighted with alpha
+            p_samples += alpha * scipy.stats.norm.pdf(x=samples, mean=mean, scale=sigma)
+
+        return p_samples
+
+    @staticmethod
+    def normal_pdf(y, mus, sigmas, log=True):
+        result = -0.5 * torch.log(2 * np.pi * sigmas ** 2) - 1 / (2 * sigmas ** 2) * (y.expand_as(mus) - mus) ** 2
+        if log:
+            return result
+        else:
+            return torch.exp(result)
+
 
 class PytorchMultivariateMoG:
 
@@ -124,6 +188,37 @@ class PytorchMultivariateMoG:
         pass
 
 
+class UnivariateMogMDN(nn.Module):
+    def __init__(self, ndim_input=2, n_hidden=5, n_components=3):
+        super(UnivariateMogMDN, self).__init__()
+        self.fc_in = nn.Linear(ndim_input, n_hidden)
+        self.tanh = nn.Tanh()
+        self.alpha_out = torch.nn.Sequential(
+              nn.Linear(n_hidden, n_components),
+              nn.Softmax()
+            )
+        self.logsigma_out = nn.Linear(n_hidden, n_components)
+        self.mu_out = nn.Linear(n_hidden, n_components)
+
+    def forward(self, x):
+        out = self.fc_in(x)
+        act = self.tanh(out)
+        out_alpha = self.alpha_out(act)
+        out_sigma = torch.exp(self.logsigma_out(act))
+        out_mu = self.mu_out(act)
+        return (out_alpha, out_sigma, out_mu)
+
+    def loss(self, model_params, y):
+        out_alpha, out_sigma, out_mu = model_params
+
+        batch_mog = PytorchUnivariateMoG(mus=out_mu, sigmas=out_sigma, alphas=out_alpha)
+        result = batch_mog.pdf(y, log=True)
+
+        result = torch.mean(result)  # mean over batch
+
+        return -result
+
+
 class MultivariateMogMDN(nn.Module):
 
     def __init__(self, ndim_input=3, ndim_output=2, n_hidden=10, n_components=3):
@@ -175,7 +270,7 @@ class MultivariateMogMDN(nn.Module):
         (idx1, idx2) = np.diag_indices(self.ndims)
         U_mat[:, :, idx1, idx2] = torch.exp(U_mat[:, :, idx1, idx2])
 
-        return (out_mu, U_mat, out_alpha)
+        return out_mu, U_mat, out_alpha
 
     def loss(self, model_params, y):
 

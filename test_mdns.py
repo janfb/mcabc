@@ -1,17 +1,7 @@
-import matplotlib.pyplot as plt
-import numpy as np
-import time
-import torch
-import torch.nn as nn
 import scipy.stats
 
-from torch.autograd import Variable
-from random import shuffle
-
-import sys
-sys.path.append('../')
 from model_comparison.utils import *
-from model_comparison.mdns import Trainer, MultivariateMogMDN, ClassificationSingleLayerMDN
+from model_comparison.mdns import *
 
 from unittest import TestCase
 
@@ -48,6 +38,21 @@ class TestMDNs(TestCase):
         theta = np.vstack((theta1, theta2))
 
         loss_trace = trainer.train(X, theta, n_epochs=100, n_minibatch=10)
+
+    def test_posterior_fitting_univariate_mog(self):
+
+        gamma_prior = scipy.stats.gamma(a=2., scale=5.)
+        thetas, x = sample_poisson(gamma_prior, n_samples=1000, sample_size=10)
+        sx = calculate_stats_toy_examples(x)
+        sx, norm = normalize(sx)
+
+        # define a MoG model with n_params + 1 inputs: data dimensions plus model index
+        model = UnivariateMogMDN(ndim_input=2, n_hidden=20, n_components=3)
+        optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+
+        trainer = Trainer(model, optimizer, verbose=True)
+
+        loss_trace = trainer.train(sx, thetas, n_epochs=200, n_minibatch=10)
 
     def test_classification_mdn(self):
 
