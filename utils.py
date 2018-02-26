@@ -38,7 +38,7 @@ def calculate_stats(x):
 
 def calculate_stats_toy_examples(x):
 
-    return np.array([np.mean(x, axis=1), np.var(x, axis=1)]).reshape(x.shape[0], 2)
+    return np.vstack((np.mean(x, axis=1), np.var(x, axis=1))).T
 
 
 def generate_negbin(N, r, prior):
@@ -541,7 +541,7 @@ def sample_poisson(prior, n_samples, sample_size, seed=None):
     np.random.seed(seed)
 
     # generate a seeded list of random states
-    random_states = np.random.randint(low=0, high=1000, size=n_samples)
+    random_states = np.random.randint(low=0, high=1000000, size=n_samples)
 
     for sample_idx in range(n_samples):
         thetas.append(prior.rvs())
@@ -559,7 +559,7 @@ def sample_poisson_gamma_mixture(prior_k, prior_theta, n_samples, sample_size, s
     np.random.seed(seed)
 
     # generate a seeded list of random states
-    random_states = np.random.randint(low=0, high=1000, size=n_samples)
+    random_states = np.random.randint(low=0, high=1000000, size=n_samples)
 
     for sample_idx in range(n_samples):
 
@@ -611,7 +611,7 @@ def nbinom_pmf_indirect(x, k, theta):
     pmf_values = []
     for ix in x.squeeze():
         # integrate over all lambdas
-        pmf_value, rr = scipy.integrate.quad(func=fun,
+        (pmf_value, rr) = scipy.integrate.quad(func=fun,
                                              a=float(gamma_pdf.ppf(1e-8)),
                                              b=float(gamma_pdf.ppf(1 - 1e-8)),
                                              args=[ix], epsrel=1e-10)
@@ -685,7 +685,7 @@ def sample_poisson_gamma_mixture_matched_means(prior1, lambs, n_samples, sample_
     np.random.seed(seed)
 
     # generate a seeded list of random states
-    random_states = np.random.randint(low=0, high=1000, size=n_samples)
+    random_states = np.random.randint(low=0, high=1000000, size=n_samples)
 
     for sample_idx in range(n_samples):
 
@@ -752,3 +752,12 @@ def calculate_nb_evidence(x, k_k, theta_k, k_theta, theta_theta, log=False):
                                            args=[x, prior_k, prior_theta])
 
     return np.log(evidence) if log else evidence
+
+
+def mse(fy, y):
+
+    batch_se = np.power(fy - y, 2)
+
+    mse = np.mean(batch_se)
+
+    return mse
