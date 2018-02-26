@@ -195,7 +195,7 @@ class UnivariateMogMDN(nn.Module):
         self.tanh = nn.Tanh()
         self.alpha_out = torch.nn.Sequential(
               nn.Linear(n_hidden, n_components),
-              nn.Softmax()
+              nn.Softmax(dim=0)
             )
         self.logsigma_out = nn.Linear(n_hidden, n_components)
         self.mu_out = nn.Linear(n_hidden, n_components)

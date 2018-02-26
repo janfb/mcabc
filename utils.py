@@ -38,6 +38,9 @@ def calculate_stats(x):
 
 def calculate_stats_toy_examples(x):
 
+    if x.ndim == 1:
+        x = x.reshape(1, x.shape[0])
+
     return np.vstack((np.mean(x, axis=1), np.var(x, axis=1))).T
 
 
@@ -711,24 +714,29 @@ def sample_poisson_gamma_mixture_matched_means(prior1, lambs, n_samples, sample_
     return np.array(thetas), np.array(samples)
 
 
-def generate_poisson_nb_data_set(n_samples, sample_size, prior_lam, prior_k, prior_theta, seed=None):
+def generate_poisson_nb_data_set(n_samples, sample_size, prior_lam, prior_k, prior_theta, seed=None,
+                                 matched_means=False):
 
-    lambs, X1 = sample_poisson(prior_lam, int(n_samples / 2), sample_size, seed=seed)
-    thetas, X2 = sample_poisson_gamma_mixture(prior_k, prior_theta, int(n_samples / 2), sample_size, seed=seed)
+    lambs, x1 = sample_poisson(prior_lam, int(n_samples / 2), sample_size, seed=seed)
+    if matched_means:
+        thetas, x2 = sample_poisson_gamma_mixture_matched_means(prior_k, lambs, int(n_samples / 2), sample_size,
+                                                                seed=seed)
+    else:
+        thetas, x2 = sample_poisson_gamma_mixture(prior_k, prior_theta, int(n_samples / 2), sample_size, seed=seed)
 
     # join data
-    X = np.vstack((X1, X2))
+    x = np.vstack((x1, x2))
 
     # define model indices
-    m = np.hstack((np.zeros(X1.shape[0]), np.ones(X2.shape[0]))).squeeze().astype(int)
+    m = np.hstack((np.zeros(x1.shape[0]), np.ones(x2.shape[0]))).squeeze().astype(int)
 
     # shuffle data
     shuffle_indices = np.arange(n_samples)
     np.random.shuffle(shuffle_indices)
-    X = X[shuffle_indices,]
+    x = x[shuffle_indices,]
     m = m[shuffle_indices].tolist()
 
-    return X, m
+    return x, m
 
 
 def calculate_nb_evidence(x, k_k, theta_k, k_theta, theta_theta, log=False):
@@ -754,10 +762,28 @@ def calculate_nb_evidence(x, k_k, theta_k, k_theta, theta_theta, log=False):
     return np.log(evidence) if log else evidence
 
 
-def mse(fy, y):
+def calculate_mse(fy, y):
 
     batch_se = np.power(fy - y, 2)
 
     mse = np.mean(batch_se)
 
     return mse
+
+
+def get_mog_posterior(model, stats_o, thetas):
+    (out_alpha, out_sigma, out_mu) = model(Variable(torch.Tensor(stats_o)))
+
+    n_thetas = thetas.size
+    n_components = out_mu.size()[0]
+
+    # get parameters in torch format
+    torch_thetas = Variable(torch.Tensor(thetas)).unsqueeze(1)
+    sigmas = out_sigma.expand(n_thetas, n_components)
+    mus = out_mu.expand(n_thetas, n_components)
+    alphas = out_alpha.expand(n_thetas, n_components)
+
+    # get predicted posterior as MoG
+    post = univariate_mog_pdf(y=torch_thetas, sigmas=sigmas, mus=mus, alphas=alphas)
+
+    return post
