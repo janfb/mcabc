@@ -286,71 +286,71 @@ def gamma_mdn_loss(out_shape, out_scale, y):
     return -result
 
 
-def get_resp_mat(y, mus, sigmas, alphas): 
+def get_resp_mat(y, mus, sigmas, alphas):
     """
-    Calculate the matrix of responsibility estimates for EM algorithm given a batch of MoG estimates. 
+    Calculate the matrix of responsibility estimates for EM algorithm given a batch of MoG estimates.
     """
 
-    n_data = mus.size()[0]    
+    n_data = mus.size()[0]
     n_components = mus.size()[1]
 
     numerator_mat = torch.zeros(n_data, n_components)
 
     denom = torch.zeros(n_data)
-    
+
     # calculate responsibility values for every data point
-    for k in range(n_components): 
+    for k in range(n_components):
         nume = alphas[:, k] * univariate_normal_pdf(y, mus[:, k], sigmas[:, k], log=False)
         denom = torch.add(denom, nume)
         numerator_mat[:, k] = nume
 
-    # add dimension to denominator vector 
+    # add dimension to denominator vector
     denom = denom.view(n_data, 1)
-    # expand it to match size with num matrix 
+    # expand it to match size with num matrix
     denom = denom.repeat(1, n_components)
-    
-    # take the fraction 
+
+    # take the fraction
     resp_mat = numerator_mat / denom
-        
+
     return resp_mat
 
 
 def my_log_sum_exp(x, axis=None):
     """
-    Apply log-sum-exp with subtraction of the largest element to improve numerical stability. 
+    Apply log-sum-exp with subtraction of the largest element to improve numerical stability.
     """
     (x_max, idx) = torch.max(x, dim=axis, keepdim=True)
-    
+
     return torch.log(torch.sum(torch.exp(x - x_max), dim=axis, keepdim=True)) + x_max
 
 
 def univariate_mog_pdf(y, mus, sigmas, alphas, log=False):
     """
-    Calculate the density values of a batch of variates given the corresponding mus, sigmas, alphas. 
-    Use log-sum-exp trick to improve numerical stability. 
-    
+    Calculate the density values of a batch of variates given the corresponding mus, sigmas, alphas.
+    Use log-sum-exp trick to improve numerical stability.
+
     return the (log)-probabilities of all the entries in the batch. Type: (n_batch, 1)-Tensor
     """
-    
+
     n_data = mus.size()[0]
     n_components = mus.size()[1]
-    
+
     log_probs_mat = Variable(torch.zeros(n_data, n_components))
-    
+
     # gather component log probs in matrix with components as columns, rows as data points
-    for k in range(n_components):     
+    for k in range(n_components):
         mu = mus[:, k].unsqueeze(1)
         sigma = sigmas[:, k].unsqueeze(1)
         lprobs = univariate_normal_pdf(y, mu, sigma, log=True)
         log_probs_mat[:, k] = lprobs
-                   
+
     log_probs_batch = my_log_sum_exp(torch.log(alphas) + log_probs_mat, axis=1)
-    
-    if log: 
+
+    if log:
         result = log_probs_batch
-    else: 
+    else:
         result = torch.exp(log_probs_batch)
-    
+
     return result
 
 
@@ -428,7 +428,7 @@ def univariate_normal_pdf(X, mus, sigmas, log=False):
     result = -0.5 * torch.log(2 * np.pi * sigmas ** 2) - 1 / (2 * sigmas ** 2) * (X.expand_as(mus) - mus) ** 2
     if log:
         return result
-    else: 
+    else:
         return torch.exp(result)
 
 
@@ -536,42 +536,27 @@ def save_figure(filename, time_stamp, folder='figures'):
     plt.savefig(os.path.join(folder, time_stamp + filename + '.png'), dpi=300)
 
 
-def sample_poisson(prior, n_samples, sample_size, seed=None):
+def sample_poisson(prior, n_samples, sample_size):
     thetas = []
     samples = []
 
-    # set the seed
-    np.random.seed(seed)
-
-    # generate a seeded list of random states
-    random_states = np.random.randint(low=0, high=1000000, size=n_samples)
-
     for sample_idx in range(n_samples):
         thetas.append(prior.rvs())
-        samples.append(scipy.stats.poisson.rvs(mu=thetas[sample_idx], size=sample_size,
-                                               random_state=random_states[sample_idx]))
+        samples.append(scipy.stats.poisson.rvs(mu=thetas[sample_idx], size=sample_size))
 
     return np.array(thetas), np.array(samples)
 
 
-def sample_poisson_gamma_mixture(prior_k, prior_theta, n_samples, sample_size, seed=None):
+def sample_poisson_gamma_mixture(prior_k, prior_theta, n_samples, sample_size):
     thetas = []
     samples = []
 
-    # set the seed
-    np.random.seed(seed)
-
-    # generate a seeded list of random states
-    random_states = np.random.randint(low=0, high=1000000, size=n_samples)
-
     for sample_idx in range(n_samples):
 
-        # set random state
-        rs = random_states[sample_idx]
         # for every sample, get a new gamma prior
-        thetas.append([prior_k.rvs(random_state=rs), prior_theta.rvs(random_state=rs)])
+        thetas.append([prior_k.rvs(), prior_theta.rvs()])
         lambdas_from_gamma = scipy.stats.gamma.rvs(a=thetas[sample_idx][0], scale=thetas[sample_idx][1],
-                                                   size=sample_size, random_state=rs)
+                                                   size=sample_size)
 
         # now for every data point in the sample, to get NB, sample from that gamma prior into the poisson
         sample = []
@@ -670,38 +655,28 @@ def nb_evidence_integrant_direct(r, p, x, prior_k, prior_theta):
     return np.exp(value)
 
 
-def calculate_pprob_from_evidences(pd1, pd2, priors=None): 
-    if priors is None: 
+def calculate_pprob_from_evidences(pd1, pd2, priors=None):
+    if priors is None:
         # p(m|d) = p(d | m) * p(m) / (sum_ p(d|m_i)p(m))))
-        # because the prior is uniform we just return the normalized evidence: 
+        # because the prior is uniform we just return the normalized evidence:
         return pd1 / (pd1 + pd2)
-    else: 
+    else:
         # p(m|d) = p(d | m) * p(m) / (sum_ p(d|m_i)p(m))))
         return pd1 * priors[0] / (pd1 * priors[0] + pd2 * priors[1])
 
 
-def sample_poisson_gamma_mixture_matched_means(prior1, lambs, n_samples, sample_size, seed=None):
+def sample_poisson_gamma_mixture_matched_means(prior1, lambs, n_samples, sample_size):
     thetas = []
     samples = []
 
-    # set the seed
-    np.random.seed(seed)
-
-    # generate a seeded list of random states
-    random_states = np.random.randint(low=0, high=1000000, size=n_samples)
-
     for sample_idx in range(n_samples):
-
-        # get random state
-        rs = random_states[sample_idx]
-
         # for every sample, get a new gamma prior
-        r = prior1.rvs(random_state=rs)
+        r = prior1.rvs()
         theta = lambs[sample_idx] / r
         thetas.append([r, theta])
         gamma_prior = scipy.stats.gamma(a=thetas[sample_idx][0], scale=thetas[sample_idx][1])
         lambdas_from_gamma = scipy.stats.gamma.rvs(a=thetas[sample_idx][0], scale=thetas[sample_idx][1],
-                                                   size=sample_size, random_state=rs)
+                                                   size=sample_size)
 
         # now for every data point in the sample, to get NB, sample from that gamma prior into the poisson
         sample = []
@@ -714,15 +689,14 @@ def sample_poisson_gamma_mixture_matched_means(prior1, lambs, n_samples, sample_
     return np.array(thetas), np.array(samples)
 
 
-def generate_poisson_nb_data_set(n_samples, sample_size, prior_lam, prior_k, prior_theta, seed=None,
+def generate_poisson_nb_data_set(n_samples, sample_size, prior_lam, prior_k, prior_theta,
                                  matched_means=False):
 
-    lambs, x1 = sample_poisson(prior_lam, int(n_samples / 2), sample_size, seed=seed)
+    lambs, x1 = sample_poisson(prior_lam, int(n_samples / 2), sample_size)
     if matched_means:
-        thetas, x2 = sample_poisson_gamma_mixture_matched_means(prior_k, lambs, int(n_samples / 2), sample_size,
-                                                                seed=seed)
+        thetas, x2 = sample_poisson_gamma_mixture_matched_means(prior_k, lambs, int(n_samples / 2), sample_size)
     else:
-        thetas, x2 = sample_poisson_gamma_mixture(prior_k, prior_theta, int(n_samples / 2), sample_size, seed=seed)
+        thetas, x2 = sample_poisson_gamma_mixture(prior_k, prior_theta, int(n_samples / 2), sample_size)
 
     # join data
     x = np.vstack((x1, x2))
