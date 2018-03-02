@@ -48,7 +48,7 @@ gna = Default(model=mna, summary=sna, prior=pna)
 
 # generate data
 params_k, sx_k = gk.gen(n_samples=n_samples)
-params_na, sx_na = gk.gen(n_samples=n_samples)
+params_na, sx_na = gna.gen(n_samples=n_samples)
 
 result_dict = dict(params_k=params_k, sx_k=sx_k, gt_k=gt_k, prior_lims_k=prior_lims_k,
                    params_na=params_na, sx_na=sx_na, gt_na=gt_na, prior_lims_na=prior_lims_na,
