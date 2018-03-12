@@ -58,12 +58,10 @@ class Trainer:
 
         raise NotImplementedError
 
-        assert self.trained, 'You need to train the network before predicting'
-        assert(isinstance(samples, Variable)), 'samples must be in torch Variable'
-        assert samples.size()[1] == self.model.ndims, 'samples must be 2D matrix with (batch_size, ndims)'
-
-
-        model_params = self.model(samples)
+        # assert self.trained, 'You need to train the network before predicting'
+        # assert(isinstance(samples, Variable)), 'samples must be in torch Variable'
+        # assert samples.size()[1] == self.model.ndims, 'samples must be 2D matrix with (batch_size, ndims)'
+        # model_params = self.model(samples)
 
 
 class PytorchUnivariateMoG:
@@ -195,12 +193,14 @@ class UnivariateMogMDN(nn.Module):
         self.tanh = nn.Tanh()
         self.alpha_out = torch.nn.Sequential(
               nn.Linear(n_hidden, n_components),
-              nn.Softmax(dim=0)
+              nn.Softmax(dim=1)
             )
         self.logsigma_out = nn.Linear(n_hidden, n_components)
         self.mu_out = nn.Linear(n_hidden, n_components)
 
     def forward(self, x):
+        # make sure the first dimension is at least singleton
+        assert x.dim() >= 2
         out = self.fc_in(x)
         act = self.tanh(out)
         out_alpha = self.alpha_out(act)

@@ -743,7 +743,7 @@ def get_mog_posterior(model, stats_o, thetas):
     (out_alpha, out_sigma, out_mu) = model(Variable(torch.Tensor(stats_o)))
 
     n_thetas = thetas.size
-    n_components = out_mu.size()[0]
+    n_batch, n_components = out_mu.size()
 
     # get parameters in torch format
     torch_thetas = Variable(torch.Tensor(thetas)).unsqueeze(1)
