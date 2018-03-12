@@ -38,7 +38,7 @@ class BaseModel:
 
         return np.array(data_list)
 
-    def gen_single(self, params, seed=None):
+    def gen_single(self, params):
         pass
 
 
