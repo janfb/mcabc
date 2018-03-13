@@ -6,7 +6,7 @@ import pandas as pd
 import pickle
 import time
 
-from delfi.generator import Default
+from delfi.generator import Default, MPGenerator
 from delfi.utils.viz import plot_pdf
 
 from lfimodels.channelomics.ChannelSingle import ChannelSingle
@@ -19,6 +19,7 @@ n_samples = 10
 seed = 3
 cython = True
 
+start = time.time()
 # set groung truth
 GT = {'k': np.array([9, 25, 0.02, 0.002]),
       'na': np.array([-35, 9, 0.182, 0.124, -50, -75, 5, -65, 6.2, 0.0091, 0.024])}
@@ -32,19 +33,30 @@ fact_inward = {'k': 1, 'na': -1}
 gt_k = GT['k']
 prior_lims_k = np.sort(np.concatenate((0.5 * gt_k.reshape(-1,1), 1.5 * gt_k.reshape(-1,1)), axis=1))
 
+n_workers = 1
+
 # as we use k as gt, the model is already set up..
-mk = ChannelSingle(channel_type='k', n_params=len(gt_k), cython=cython, seed=seed)
+# mk = ChannelSingle(channel_type='k', n_params=len(gt_k), cython=cython, seed=seed)
+
+model_seeds = np.arange(1, n_workers + 1)
+mks = [ChannelSingle(channel_type='k', n_params=len(gt_k), cython=cython, seed=model_seeds[i]) for i in range(n_workers)]
 pk = dd.Uniform(lower=prior_lims_k[:, 0], upper=prior_lims_k[:, 1], seed=seed)
 sk = ChannelStats(channel_type='k', seed=seed)
-gk = Default(model=mk, summary=sk, prior=pk)
+# gk = Default(model=mk, summary=sk, prior=pk, seed=seed)
+gk = MPGenerator(models=mks, summary=sk, prior=pk, seed=seed)
 
 # set up na model
 gt_na = GT['na']
 prior_lims_na = np.sort(np.concatenate((0.5 * gt_na.reshape(-1,1), 1.5 * gt_na.reshape(-1,1)), axis=1))
-mna = ChannelSingle(channel_type='na', n_params=len(gt_na), cython=cython, seed=seed)
+
+# mna = ChannelSingle(channel_type='na', n_params=len(gt_na), cython=cython, seed=seed)
+model_seeds = np.arange(n_workers, 2 * n_workers)
+mnas = [ChannelSingle(channel_type='na', n_params=len(gt_na), cython=cython, seed=model_seeds[i]) for i in range(n_workers)]
 pna = dd.Uniform(lower=prior_lims_na[:, 0], upper=prior_lims_na[:,1], seed=seed)
 sna = ChannelStats(channel_type='na', seed=seed)
-gna = Default(model=mna, summary=sna, prior=pna)
+# gna = Default(model=mna, summary=sna, prior=pna, seed=seed)
+gna = MPGenerator(models=mnas, summary=sna, prior=pna, seed=seed)
+
 
 # generate data
 params_k, sx_k = gk.gen(n_samples=n_samples)
@@ -60,3 +72,5 @@ filename = 'training_data_k_na_N{}seed{}'.format(n_samples, seed)
 full_path_to_file = os.path.join(folder, filename + '.p')
 with open(full_path_to_file, 'wb') as outfile:
     pickle.dump(result_dict, outfile, protocol=pickle.HIGHEST_PROTOCOL)
+
+print(time.time() - start)
