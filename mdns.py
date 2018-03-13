@@ -294,11 +294,17 @@ class ClassificationSingleLayerMDN(nn.Module):
         self.m_out = nn.Linear(n_hidden, ndim_output)
 
         self.loss = nn.CrossEntropyLoss()
-        self.softmax = nn.Softmax(dim=0)
+        # the softmax is taken over the second dimension, given that the input x is (n_samples, n_features)
+        self.softmax = nn.Softmax(dim=1)
 
     def forward(self, x):
+        # make sure x has n samples in rows and features in columns: x is (n_samples, n_features)
+        assert x.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
         out = self.fc_in(x)
         act = self.tanh(out)
-        out_m = self.m_out(act)
+        out_m = self.softmax(self.m_out(act))
 
         return out_m
+
+    def predict(self, x):
+        pass
