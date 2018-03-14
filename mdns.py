@@ -306,5 +306,12 @@ class ClassificationSingleLayerMDN(nn.Module):
 
         return out_m
 
-    def predict(self, x):
-        pass
+    def predict(self, sx):
+        if not isinstance(sx, Variable):
+            sx = Variable(torch.Tensor(sx))
+
+        assert sx.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
+
+        p_vec = self.forward(sx)
+
+        return p_vec.data.numpy().squeeze()
