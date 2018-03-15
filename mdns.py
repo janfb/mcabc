@@ -3,6 +3,7 @@ import scipy.stats
 import torch
 import torch.nn as nn
 
+from delfi.distribution.mixture import MoG
 from torch.autograd import Variable
 from model_comparison.utils import multivariate_normal_pdf, my_log_sum_exp, batch_generator
 
@@ -115,7 +116,7 @@ class PytorchUnivariateMoG:
             alpha = self.alphas[0, k].data.numpy()
             mean = self.mus[0, k].data.numpy()
             sigma = self.sigmas[0, k].data.numpy()
-                # add to result, weighted with alpha
+            # add to result, weighted with alpha
             p_samples += alpha * scipy.stats.norm.pdf(x=samples, mean=mean, scale=sigma)
 
         return p_samples
@@ -161,6 +162,31 @@ class PytorchUnivariateMoG:
 
         return quantiles
 
+    @property
+    def mean(self):
+        """
+        Mean of MoG
+        """
+        m = 0
+
+        for k in range(self.n_components):
+            m += (self.alphas[:, k] * self.mus[:, k]).data.numpy().squeeze()
+
+        return m
+
+    def get_dd_object(self):
+        """
+        Get the delfi.distribution object
+        :return:
+        """
+        # convert to dd format
+        a = self.alphas.data.numpy().squeeze().tolist()
+        ms = [[m] for m in self.mus.data.numpy().squeeze().tolist()]
+        Ss = [[[s ** 2]] for s in self.sigmas.data.numpy().squeeze().tolist()]
+
+        # set up dd MoG object
+        return MoG(a=a, ms=ms, Ss=Ss)
+
 
 class PytorchUnivariateGaussian:
 
@@ -168,6 +194,10 @@ class PytorchUnivariateGaussian:
 
         self.mu = mu
         self.sigma = sigma
+
+    @property
+    def mean(self):
+        return self.mu.data.numpy()
 
     def eval(self, samples, log=False):
         """
@@ -187,6 +217,13 @@ class PytorchUnivariateGaussian:
         Percent point function for univariate Gaussian
         """
         return scipy.stats.norm.ppf(q, loc=self.mu.data.numpy(), scale=self.sigma.data.numpy())
+
+    def ztrans_inv(self, mean, std):
+
+        m = std * self.mu + mean
+        sigma = std * self.sigma
+
+        return PytorchUnivariateGaussian(m, sigma)
 
 
 class PytorchMultivariateMoG:
