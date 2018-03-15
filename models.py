@@ -55,6 +55,25 @@ class PoissonModel(BaseModel):
             lam = params
         return self.rng.poisson(lam=lam, size=self.sample_size)
 
+    def get_exact_posterior(self, x_obs, k, theta):
+        """
+        Given observed data and conjugate prior parameters, calculate the exact gamma posterior over lambda
+        :param x_obs:
+        :param k: prior shape
+        :param theta: prior scale
+        :return: scipy.stats.gamma object
+        """
+
+        sample_size = x_obs.size
+        # get analytical gamma posterior
+        k_post = k + np.sum(x_obs)
+
+        # use the posterior given the summary stats, not the data vector
+        scale_post = 1. / (sample_size + theta ** -1)
+
+        # return gamma posterior
+        return scipy.stats.gamma(a=k_post, scale=scale_post)
+
 
 class NegativeBinomialModel(BaseModel):
     def __init__(self, dim_param=2, sample_size=10, n_workers=1, seed=None):
