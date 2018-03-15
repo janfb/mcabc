@@ -128,6 +128,66 @@ class PytorchUnivariateMoG:
         else:
             return torch.exp(result)
 
+    def ppf(self, q):
+        """
+        Percent point function for univariate MoG: given a quantile / mass value, get the corresponding variable
+        :param q: the quantile value, e.g., .95, .5 etc.
+        :return: the parameter value, e.g., the value corresponding to q amount of mass
+        """
+        raise NotImplementedError
+
+    def get_quantile(self, x):
+        """
+        For sample(s) x calculate the corresponding quantiles
+        :param x:
+        :return:
+        """
+        # if x is a scalar, make it an array
+        x = np.atleast_1d(x)
+        # make sure x is 1D
+        assert x.ndim == 1, 'the input samples have to be 1D'
+
+        # the quantile of the MoG is the weighted sum of the quantiles of the Gaussians
+        # for every component
+        quantiles = np.zeros_like(x)
+        for k in range(self.n_components):
+            alpha = self.alphas[0, k].data.numpy()
+            mean = self.mus[0, k].data.numpy()
+            sigma = self.sigmas[0, k].data.numpy()
+
+            # evaluate the inverse cdf for every component and add to
+            # add, weighted with alpha
+            quantiles += alpha * scipy.stats.norm.cdf(x=x, loc=mean, scale=sigma)
+
+        return quantiles
+
+
+class PytorchUnivariateGaussian:
+
+    def __init__(self, mu, sigma):
+
+        self.mu = mu
+        self.sigma = sigma
+
+    def eval(self, samples, log=False):
+        """
+        Calculate pdf values for given samples
+        :param samples:
+        :return:
+        """
+        result = -0.5 * torch.log(2 * np.pi * self.sigma ** 2) - \
+                 1 / (2 * self.sigma ** 2) * (samples.expand_as(self.mu) - self.mu) ** 2
+        if log:
+            return result
+        else:
+            return torch.exp(result)
+
+    def ppf(self, q):
+        """
+        Percent point function for univariate Gaussian
+        """
+        return scipy.stats.norm.ppf(q, loc=self.mu.data.numpy(), scale=self.sigma.data.numpy())
+
 
 class PytorchMultivariateMoG:
 
@@ -206,10 +266,10 @@ class UnivariateMogMDN(nn.Module):
         out_alpha = self.alpha_out(act)
         out_sigma = torch.exp(self.logsigma_out(act))
         out_mu = self.mu_out(act)
-        return (out_alpha, out_sigma, out_mu)
+        return out_mu, out_sigma, out_alpha
 
     def loss(self, model_params, y):
-        out_alpha, out_sigma, out_mu = model_params
+        out_mu, out_sigma, out_alpha = model_params
 
         batch_mog = PytorchUnivariateMoG(mus=out_mu, sigmas=out_sigma, alphas=out_alpha)
         result = batch_mog.pdf(y, log=True)
@@ -217,6 +277,21 @@ class UnivariateMogMDN(nn.Module):
         result = torch.mean(result)  # mean over batch
 
         return -result
+
+    def predict(self, sx):
+        """
+        Take input sx and predict the corresponding posterior over parameters
+        :param sx: shape (n_samples, n_features), e.g., for single sx (1, n_stats)
+        :return: pytorch univariate MoG
+        """
+        if not isinstance(sx, Variable):
+            sx = Variable(torch.Tensor(sx))
+
+        assert sx.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
+
+        out_mu, out_sigma, out_alpha = self.forward(sx)
+
+        return PytorchUnivariateMoG(out_mu, out_sigma, out_alpha)
 
 
 class MultivariateMogMDN(nn.Module):
@@ -282,6 +357,21 @@ class MultivariateMogMDN(nn.Module):
         result = torch.mean(result)  # mean over batch
 
         return -result
+
+    def predict(self, sx):
+        """
+        Take input sx and predict the corresponding posterior over parameters
+        :param sx: shape (n_samples, n_features), e.g., for single sx (1, n_stats)
+        :return: pytorch univariate MoG
+        """
+        if not isinstance(sx, Variable):
+            sx = Variable(torch.Tensor(sx))
+
+        assert sx.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
+
+        out_mu, U_mat, out_alpha = self.forward(sx)
+
+        return PytorchMultivariateMoG(out_mu, U_mat, out_alpha)
 
 
 class ClassificationSingleLayerMDN(nn.Module):
