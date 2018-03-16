@@ -117,7 +117,7 @@ class PytorchUnivariateMoG:
             mean = self.mus[0, k].data.numpy()
             sigma = self.sigmas[0, k].data.numpy()
             # add to result, weighted with alpha
-            p_samples += alpha * scipy.stats.norm.pdf(x=samples, mean=mean, scale=sigma)
+            p_samples += alpha * scipy.stats.norm.pdf(x=samples, loc=mean, scale=sigma)
 
         return p_samples
 
@@ -135,7 +135,14 @@ class PytorchUnivariateMoG:
         :param q: the quantile value, e.g., .95, .5 etc.
         :return: the parameter value, e.g., the value corresponding to q amount of mass
         """
-        raise NotImplementedError
+        # get delfi object
+        delfi_mog = self.get_dd_object()
+
+        # project to single gaussian
+        g = delfi_mog.project_to_gaussian()
+
+        # use scipy norm ppf fun
+        return scipy.stats.norm.ppf(q, loc=g.mean, scale=g.std)
 
     def get_quantile(self, x):
         """
@@ -174,6 +181,14 @@ class PytorchUnivariateMoG:
 
         return m
 
+    @property
+    def std(self):
+        """
+        Scale of MoG
+        :return:
+        """
+        return np.sum([self.alphas[0][k] * self.sigmas[0][k] for k in range(self.n_components)]).data.numpy().squeeze()
+
     def get_dd_object(self):
         """
         Get the delfi.distribution object
@@ -186,6 +201,16 @@ class PytorchUnivariateMoG:
 
         # set up dd MoG object
         return dd.mixture.MoG(a=a, ms=ms, Ss=Ss)
+
+    def ztrans_inv(self, mean, std):
+
+        ms = []
+        sigmas = []
+        for k in range(self.n_components):
+            ms.append(std * self.mus[k] + mean)
+            sigmas.append(std * self.std)
+
+        return PytorchUnivariateMoG(Variable(ms), Variable(sigmas), self.alphas)
 
 
 class PytorchUnivariateGaussian:

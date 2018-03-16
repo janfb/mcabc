@@ -755,3 +755,42 @@ def get_mog_posterior(model, stats_o, thetas):
     post = univariate_mog_pdf(y=torch_thetas, sigmas=sigmas, mus=mus, alphas=alphas)
 
     return post
+
+
+def calculate_dkl(p, q):
+    """
+    Calculate dkl between p and q.
+    :param p: scipy stats object with .pdf() and .ppf() methods
+    :param q: delfi.distribution object with .eval() method
+    :return: dkl(p, q)
+    """
+    # parameter range
+    p_start = p.ppf(1e-9)
+    p_end = p.ppf(1 - 1e-9)
+
+    # integral function
+    def integrant(x):
+        pp = p.pdf(x)
+        pq = q.eval([[x]], log=False)
+        return pp * np.log(pp / pq)
+
+    (dkl, err) = scipy.integrate.quad(integrant, a=p_start, b=p_end)
+    return dkl
+
+
+def calculate_credible_intervals_success(theta, ppf_fun, intervals):
+    """
+    Calculate credible intervals given a true parameter value and a percent point function of a distribution
+    :param theta: true parameter
+    :param ppf_fun: percent point function (inverse CDF)
+    :param intervals: credible intervals to be calculated
+    :return: a binary vector, same length as intervals, indicating whether the true parameter lies in that interval
+    """
+    success_counts = np.zeros_like(intervals)
+    tails = (1 - intervals) / 2
+
+    # get the boundaries of the credible intervals
+    lows, highs = ppf_fun(tails), ppf_fun(1 - tails)
+    success = np.ones_like(intervals) * np.logical_and(lows <= theta, theta <= highs)
+
+    return success
