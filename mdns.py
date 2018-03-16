@@ -482,4 +482,39 @@ class ClassificationMDN(nn.Module):
 
         p_vec = self.forward(x)
 
+
+        return p_vec.data.numpy().squeeze()
+
+
+# keep this class for backwards compability.
+class ClassificationSingleLayerMDN(nn.Module):
+
+    def __init__(self, ndim_input=2, ndim_output=2, n_hidden=5):
+        super(ClassificationSingleLayerMDN, self).__init__()
+
+        self.fc_in = nn.Linear(ndim_input, n_hidden)
+        self.tanh = nn.Tanh()
+        self.m_out = nn.Linear(n_hidden, ndim_output)
+
+        self.loss = nn.CrossEntropyLoss()
+        # the softmax is taken over the second dimension, given that the input x is (n_samples, n_features)
+        self.softmax = nn.Softmax(dim=1)
+
+    def forward(self, x):
+        # make sure x has n samples in rows and features in columns: x is (n_samples, n_features)
+        assert x.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
+        out = self.fc_in(x)
+        act = self.tanh(out)
+        out_m = self.softmax(self.m_out(act))
+
+        return out_m
+
+    def predict(self, sx):
+        if not isinstance(sx, Variable):
+            sx = Variable(torch.Tensor(sx))
+
+        assert sx.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
+
+        p_vec = self.forward(sx)
+
         return p_vec.data.numpy().squeeze()
