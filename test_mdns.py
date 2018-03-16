@@ -13,7 +13,7 @@ class TestMDNs(TestCase):
         n_params = 2  # 2D problem, better visualization
 
         # define a MoG model with n_params + 1 inputs: data dimensions plus model index
-        model = MultivariateMogMDN(ndim_input=n_params + 1, ndim_output=2, n_hidden=20, n_components=1)
+        model = MultivariateMogMDN(ndim_input=n_params + 1, ndim_output=2, n_hidden_units=20, n_components=1)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
         trainer = Trainer(model, optimizer, verbose=True)
