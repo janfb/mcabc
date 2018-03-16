@@ -442,3 +442,50 @@ class ClassificationSingleLayerMDN(nn.Module):
         p_vec = self.forward(sx)
 
         return p_vec.data.numpy().squeeze()
+
+
+class ClassificationComplexMDN(nn.Module):
+
+    def __init__(self, n_input=2, n_output=2, n_hidden=10, n_hidden_layers=1):
+        super(ClassificationComplexMDN, self).__init__()
+
+        self.n_hidden_layers = n_hidden_layers
+
+        # define funs
+        self.softmax = nn.Softmax(dim=1)
+        self.tanh = nn.Tanh()
+        self.loss = nn.CrossEntropyLoss()
+
+        # define architecture
+        # input layer takes features, expands to n_hidden units and applies tanh activation function
+        self.input_layer = nn.Linear(n_input, n_hidden)
+        # middle layer takes activates, passes fully connected to next layer and applies activation
+        # take arbitrary number of hidden layers:
+        self.hidden_layers = nn.ModuleList()
+        for _ in range(self.n_hidden_layers):
+            self.hidden_layers.append(nn.Linear(n_hidden, n_hidden))
+
+        # last layer takes activation, maps to output vectors, applies activation function and softmax for normalization
+        self.output_layer = nn.Linear(n_hidden, n_output)
+
+    def forward(self, x):
+        assert x.dim() == 2
+        # batch_size, n_features = x.size()
+
+        # forward path
+        x = self.tanh(self.input_layer(x))
+        for layer in self.hidden_layers:
+            x = self.tanh(layer(x))
+        p_hat = self.softmax(self.output_layer(x))
+
+        return p_hat
+
+    def predict(self, x):
+        if not isinstance(x, Variable):
+            x = Variable(torch.Tensor(x))
+
+        assert x.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
+
+        p_vec = self.forward(x)
+
+        return p_vec.data.numpy().squeeze()
