@@ -770,15 +770,15 @@ def calculate_dkl(p, q):
 
     # integral function
     def integrant(x):
-        pp = p.pdf(x)
-        pq = q.eval([[x]], log=False)
-        return pp * np.log(pp / pq)
+        log_pp = p.logpdf(x)
+        log_pq = q.eval(np.reshape(x, (1, -1)), log=True)
+        return np.exp(log_pp) * (log_pp - log_pq)
 
     (dkl, err) = scipy.integrate.quad(integrant, a=p_start, b=p_end)
     return dkl
 
 
-def calculate_credible_intervals_success(theta, ppf_fun, intervals):
+def calculate_credible_intervals_success(theta, ppf_fun, intervals, args):
     """
     Calculate credible intervals given a true parameter value and a percent point function of a distribution
     :param theta: true parameter
@@ -786,11 +786,36 @@ def calculate_credible_intervals_success(theta, ppf_fun, intervals):
     :param intervals: credible intervals to be calculated
     :return: a binary vector, same length as intervals, indicating whether the true parameter lies in that interval
     """
-    success_counts = np.zeros_like(intervals)
     tails = (1 - intervals) / 2
 
     # get the boundaries of the credible intervals
-    lows, highs = ppf_fun(tails), ppf_fun(1 - tails)
+    lows, highs = ppf_fun(tails, *args), ppf_fun(1 - tails, *args)
     success = np.ones_like(intervals) * np.logical_and(lows <= theta, theta <= highs)
 
     return success
+
+
+def calculate_mog_ppf(qs, mog, n_samples=100000):
+    """
+    Given quantiles and a delfi distribution mog, calculate values corresponding to the quantiles by approximating the
+    MoG inverse CDF via sampling.
+    :param qs: quantiles, array-like
+    :param mog: delfi.distribution.MoG object
+    :param n_samples: number of samples used to for sampling
+    :return: corresponding values, array-like
+    """
+
+    qs = np.atleast_1d(qs)
+    values = np.zeros_like(qs)
+
+    samples = mog.gen(n_samples)
+    bins = np.linspace(samples.min(), samples.max(), 1000)
+    bin_idx = np.digitize(samples, bins)
+    n = np.bincount(bin_idx.squeeze())
+    cdf = np.cumsum(n) / np.sum(n)
+
+    for i, qi in enumerate(qs):
+        quantile_idx = np.where(cdf >= qi)[0][0]
+        values[i] = bins[quantile_idx]
+
+    return values

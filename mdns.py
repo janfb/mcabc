@@ -105,11 +105,16 @@ class PytorchUnivariateMoG:
 
         return result
 
-    def eval_numpy(self, samples):
+    def eval_numpy(self, samples, log=False):
+        """
+
+        :param samples: array-like in shape (1, n_samples)
+        :param log: if true, log pdf are returned
+        :return: pdf values, (1, n_samples)
+        """
         # eval existing posterior for some params values and return pdf values in numpy format
 
-        sample_shape = samples.shape[:-1]
-        p_samples = np.zeros(sample_shape)
+        p_samples = np.zeros_like(samples)
 
         # for every component
         for k in range(self.n_components):
@@ -119,7 +124,10 @@ class PytorchUnivariateMoG:
             # add to result, weighted with alpha
             p_samples += alpha * scipy.stats.norm.pdf(x=samples, loc=mean, scale=sigma)
 
-        return p_samples
+        if log:
+            return np.log(samples)
+        else:
+            return p_samples
 
     @staticmethod
     def normal_pdf(y, mus, sigmas, log=True):
@@ -202,16 +210,6 @@ class PytorchUnivariateMoG:
         # set up dd MoG object
         return dd.mixture.MoG(a=a, ms=ms, Ss=Ss)
 
-    def ztrans_inv(self, mean, std):
-
-        ms = []
-        sigmas = []
-        for k in range(self.n_components):
-            ms.append(std * self.mus[k] + mean)
-            sigmas.append(std * self.std)
-
-        return PytorchUnivariateMoG(Variable(ms), Variable(sigmas), self.alphas)
-
 
 class PytorchUnivariateGaussian:
 
@@ -289,8 +287,7 @@ class PytorchMultivariateMoG:
     def eval_numpy(self, samples):
         # eval existing posterior for some params values and return pdf values in numpy format
 
-        sample_shape = samples.shape[:-1]
-        p_samples = np.zeros(sample_shape)
+        p_samples = np.zeros(samples.shape)
 
         # for every component
         for k in range(self.n_components):
@@ -299,7 +296,7 @@ class PytorchMultivariateMoG:
             U = self.Us[0, k,].data.numpy()
             # get cov from Choleski transform
             cov = np.linalg.inv(U.T.dot(U))
-                # add to result, weighted with alpha
+            # add to result, weighted with alpha
             p_samples += alpha * scipy.stats.multivariate_normal.pdf(x=samples, mean=mean, cov=cov)
 
         return p_samples
