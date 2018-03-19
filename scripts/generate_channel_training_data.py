@@ -14,9 +14,10 @@ from lfimodels.channelomics.ChannelSuper import ChannelSuper
 from lfimodels.channelomics.ChannelStats import ChannelStats
 from matplotlib import pyplot as plt
 
+
 ## GOAL of this script: generate k and na channel data and save to disk for later training
-n_samples = 10
-seed = 3
+n_samples = 100000
+seed = 1
 cython = True
 
 start = time.time()
@@ -31,9 +32,9 @@ E_channel = {'k': -86.7, 'na': 50}
 fact_inward = {'k': 1, 'na': -1}
 
 gt_k = GT['k']
-prior_lims_k = np.sort(np.concatenate((0.5 * gt_k.reshape(-1,1), 1.5 * gt_k.reshape(-1,1)), axis=1))
+prior_lims_k = np.sort(np.concatenate((0.3 * gt_k.reshape(-1,1), 1.3 * gt_k.reshape(-1,1)), axis=1))
 
-n_workers = 1
+n_workers = 50
 
 # as we use k as gt, the model is already set up..
 # mk = ChannelSingle(channel_type='k', n_params=len(gt_k), cython=cython, seed=seed)
