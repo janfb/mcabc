@@ -306,7 +306,7 @@ class PytorchMultivariateMoG:
         Get the delfi.distribution object
         :return: delfi.distribution.mixture.MoG object
         """
-        a = self.alphas.data.numpy().squeeze()
+        a = self.alphas.data.numpy().reshape(self.n_components).tolist()
         ms = self.mus.data.numpy().reshape(self.n_components, self.ndims).tolist()
         Us = self.Us.data.numpy().reshape(self.n_components, self.ndims, self.ndims).tolist()
 

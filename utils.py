@@ -784,6 +784,7 @@ def calculate_credible_intervals_success(theta, ppf_fun, intervals, args):
     :param theta: true parameter
     :param ppf_fun: percent point function (inverse CDF)
     :param intervals: credible intervals to be calculated
+    :param args: arguments to the ppf function
     :return: a binary vector, same length as intervals, indicating whether the true parameter lies in that interval
     """
     tails = (1 - intervals) / 2
@@ -795,7 +796,7 @@ def calculate_credible_intervals_success(theta, ppf_fun, intervals, args):
     return success
 
 
-def calculate_mog_ppf(qs, mog, n_samples=100000):
+def calculate_ppf_from_samples(qs, samples):
     """
     Given quantiles and a delfi distribution mog, calculate values corresponding to the quantiles by approximating the
     MoG inverse CDF via sampling.
@@ -808,12 +809,16 @@ def calculate_mog_ppf(qs, mog, n_samples=100000):
     qs = np.atleast_1d(qs)
     values = np.zeros_like(qs)
 
-    samples = mog.gen(n_samples)
+    # use bins from min to max
     bins = np.linspace(samples.min(), samples.max(), 1000)
+    # asign samples to bins
     bin_idx = np.digitize(samples, bins)
+    # count samples per bin --> histogram
     n = np.bincount(bin_idx.squeeze())
+    # take the normalized cum sum as the pdf
     cdf = np.cumsum(n) / np.sum(n)
 
+    # for every quantile, get the corresponding value on the cdf
     for i, qi in enumerate(qs):
         quantile_idx = np.where(cdf >= qi)[0][0]
         values[i] = bins[quantile_idx]
