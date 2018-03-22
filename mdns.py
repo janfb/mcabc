@@ -252,14 +252,33 @@ class PytorchUnivariateGaussian:
 class PytorchMultivariateMoG:
 
     def __init__(self, mus, Us, alphas):
+        """
+        Set up a MoG in PyTorch. ndims is the number of dimensions of the Gaussian
+        :param mus: PyTorch Variable of shape (n_samples, ndims, ncomponents)
+        :param Us: PyTorch Variable of shape (n_samples, ncomponents, ndims, ndims)
+        :param alphas: PyTorch Variable of shape (n_samples, ncomponents)
+        """
 
         assert isinstance(mus, Variable), 'all inputs need to be pytorch Variable objects'
+        assert isinstance(Us, Variable), 'all inputs need to be pytorch Variable objects'
+        assert isinstance(alphas, Variable), 'all inputs need to be pytorch Variable objects'
 
         self.mus = mus
         self.Us = Us
         self.alphas = alphas
 
         self.nbatch, self.ndims, self.n_components = mus.size()
+
+    @property
+    def mean(self):
+        """
+        Mean of the MoG
+        """
+        mean = 0
+        for k in range(self.n_components):
+            mean += (self.alphas[:, k] * self.mus[:, :, k]).data.numpy().squeeze()
+        return mean
+
 
     def pdf(self, y, log=True):
         # get params: batch size N, ndims D, ncomponents K
@@ -306,14 +325,50 @@ class PytorchMultivariateMoG:
         Get the delfi.distribution object
         :return: delfi.distribution.mixture.MoG object
         """
-        a = self.alphas.data.numpy().reshape(self.n_components).tolist()
-        ms = self.mus.data.numpy().reshape(self.n_components, self.ndims).tolist()
-        Us = self.Us.data.numpy().reshape(self.n_components, self.ndims, self.ndims).tolist()
 
+        a = []
+        ms = []
+        Us = []
+        # for every component, add the alphas, means and Cholesky transform U of P to lists
+        for k in range(self.n_components):
+            a.append(self.alphas[:, k].data.numpy()[0])
+            ms.append(self.mus[:, :, k].data.numpy().squeeze())
+            Us.append(self.Us[:, k, :, :].data.numpy().squeeze())
+
+        # delfi MoG takes lists over components as arguments
         return dd.mixture.MoG(a=a, ms=ms, Us=Us)
+
+    def get_quantile(self, x):
+        """
+        For sample(s) x calculate the corresponding quantiles. Calculate quantiles of individual Gaussians using scipy
+        and then take the weighted sum over components.
+        :param x: shape (n_samples, ndims), at least (1, ndims)
+        :return:
+        """
+        # if x is a scalar, make it an array
+        x = np.atleast_1d(x)
+        # make sure x is 1D
+        assert x.ndim == 2, 'the input array should be 2D, (n_samples, ndims)'
+        assert x.shape[1] == self.ndims, 'the number of entries per sample should be ndims={}'.format(self.ndims)
+
+        # the quantile of the MoG is the weighted sum of the quantiles of the Gaussians
+        # for every component
+        quantiles = np.zeros(x.shape[0])
+        for k in range(self.n_components):
+            alpha = self.alphas[:, k].data.numpy()[0]
+            mean = self.mus[:, :, k].data.numpy().squeeze()
+            U = self.Us[:, k, :, :].data.numpy().squeeze()
+            # get cov from Choleski transform
+            C = np.linalg.inv(U.T)
+            S = np.dot(C.T, C)
+            # add to result, weighted with alpha
+            quantiles += alpha * scipy.stats.multivariate_normal.cdf(x=x, mean=mean, cov=S)
+
+        return quantiles
 
 
 class UnivariateMogMDN(nn.Module):
+
     def __init__(self, ndim_input=2, n_hidden=5, n_components=3):
         super(UnivariateMogMDN, self).__init__()
         self.fc_in = nn.Linear(ndim_input, n_hidden)

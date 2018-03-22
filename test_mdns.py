@@ -13,7 +13,7 @@ class TestMDNs(TestCase):
         n_params = 2  # 2D problem, better visualization
 
         # define a MoG model with n_params + 1 inputs: data dimensions plus model index
-        model = MultivariateMogMDN(ndim_input=n_params + 1, ndim_output=2, n_hidden_units=20, n_components=1)
+        model = MultivariateMogMDN(ndim_input=n_params + 1, ndim_output=2)
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
         trainer = Trainer(model, optimizer, verbose=True)
@@ -37,27 +37,27 @@ class TestMDNs(TestCase):
 
         theta = np.vstack((theta1, theta2))
 
-        loss_trace = trainer.train(X, theta, n_epochs=100, n_minibatch=10)
+        loss_trace = trainer.train(X, theta, n_epochs=10, n_minibatch=10)
 
     def test_posterior_fitting_univariate_mog(self):
 
         gamma_prior = scipy.stats.gamma(a=2., scale=5.)
-        thetas, x = sample_poisson(gamma_prior, n_samples=1000, sample_size=10)
+        thetas, x = sample_poisson(gamma_prior, n_samples=100, sample_size=10)
         sx = calculate_stats_toy_examples(x)
         sx, norm = normalize(sx)
 
         # define a MoG model with n_params + 1 inputs: data dimensions plus model index
-        model = UnivariateMogMDN(ndim_input=2, n_hidden=20, n_components=3)
+        model = UnivariateMogMDN()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
         trainer = Trainer(model, optimizer, verbose=True)
 
-        loss_trace = trainer.train(sx, thetas, n_epochs=200, n_minibatch=10)
+        loss_trace = trainer.train(sx, thetas, n_epochs=10, n_minibatch=10)
 
     def test_classification_mdn(self):
 
         sample_size = 10
-        n_samples = 1000
+        n_samples = 100
 
         # set RNG
         seed = 2
@@ -105,9 +105,52 @@ class TestMDNs(TestCase):
         X, norm = normalize(X)
 
         # define a MoG model with n_params + 1 inputs: data dimensions plus model index
-        model = ClassificationSingleLayerMDN(ndim_input=2, n_hidden=10)
+        model = ClassificationMDN()
         optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
         trainer = Trainer(model, optimizer, verbose=True, classification=True)
 
-        loss_trace = trainer.train(X, m, n_epochs=100, n_minibatch=10)
+        loss_trace = trainer.train(X, m, n_epochs=10, n_minibatch=10)
+
+    def test_multivariateMoGMDN_prediction(self):
+
+        model = MultivariateMogMDN(ndim_input=2, ndim_output=2)
+
+        post = model.predict(np.random.rand(1, 2))
+
+    def test_transformation_to_delfi_posterior(self):
+
+        model = MultivariateMogMDN(ndim_input=2, ndim_output=2)
+
+        post = model.predict(np.random.rand(1, 2))
+
+        post_dd = post.get_dd_object()
+
+    def test_multivariate_get_dd_object(self):
+        model = MultivariateMogMDN(ndim_input=2, ndim_output=2)
+
+        pp = model.predict([[1., 1.]])
+        dd = pp.get_dd_object()
+
+        dd_means = [x.m.tolist() for x in dd.xs]
+
+        pp_means = [pp.mus[:, :, k].data.numpy().squeeze().tolist() for k in range(pp.n_components)]
+
+        assert dd_means == pp_means, 'means should be the same for every component'
+
+        assert np.isclose(dd.mean, pp.mean).all(), 'over-all means should be equal: {}, {}'.format(dd.mean, pp.mean)
+
+    def test_multivariate_get_quantile(self):
+
+        model = MultivariateMogMDN(ndim_input=2, ndim_output=2, n_components=1)
+
+        pp = model.predict([[1., 1.]])
+
+        # just test the outer edges and the mean
+        lower = pp.mean - 1e4
+        upper = pp.mean + 1e4
+
+        # get corresponding quantiles
+        quantiles = pp.get_quantile(np.reshape([lower, upper], (2, -1)))
+
+        assert np.isclose(quantiles, [0., 1.]).all(), 'quantiles should be close to [0, 1.], but {}'.format(quantiles)
