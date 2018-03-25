@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
+import tqdm
 
 from torch.autograd import Variable
 from random import shuffle
@@ -870,7 +871,7 @@ def inverse_transform_sampling_2d(x1, x2, joint_pdf, n_samples):
     :param x2: values of RV x2
     :param joint_pdf: 2D array of PDF values corresponding to the bins defined in x1 and x2
     :param n_samples: number of samples to draw
-    :return:
+    :return: np array with samples (n_samples, 2)
     """
 
     # calculate marginal of x1 by integrating over x2
@@ -903,4 +904,126 @@ def inverse_transform_sampling_2d(x1, x2, joint_pdf, n_samples):
         # add the corresponding value
         samples_x2.append(x2[idx_u])
 
-    return np.vstack((samples_x1, np.array(samples_x2)))
+    return np.vstack((samples_x1, np.array(samples_x2))).T
+
+
+class NBExactPosterior:
+    """
+    Class for the exact NB posterior. Defined by observed data and priors on k and theta, the shape and scale of the
+    Gamma distribution in the Poisson-Gamma mixture.
+
+    Has methods to calculate the exact posterior in terms of a joint pdf matrix using numerical integration.
+    And methods to evaluate and to generate samples under this pdf.
+
+    Once the posterior is calculated and samples are generated, it has properties mean and std to be compared to the
+    predicted posterior.
+    """
+
+    def __init__(self, x, prior_k, prior_theta):
+        """
+        Instantiate the posterior with data and priors. the actual posterior has to be calculate using
+        calculate_exact_posterior()
+        :param x: observed data, array of counts
+        :param prior_k: scipy.stats.gamma object
+        :param prior_theta: scipy.stats.gamma object
+        """
+
+        # set flags
+        self.samples_generated = False  # whether mean and std are defined
+        self.calculated = False  # whether exact solution has been calculated
+
+        self.xo = x
+        self.prior_k = prior_k
+        self.prior_th = prior_theta
+
+        # prelocate
+        self.evidence = None
+        self.joint_pdf = None
+        self.ks = None
+        self.thetas = None
+
+        self.samples = []
+
+    def calculat_exact_posterior(self, n_samples=200, prec=1e-4):
+        """
+        Calculate the exact posterior.
+        :param n_samples: the number of entries per dimension on the joint_pdf grid
+        :param prec: precision for the range of prior values
+        :return: No return
+        """
+
+        # if not calculated
+        if not self.calculated:
+            self.calculated = True
+            # set up a grid
+            self.ks = np.linspace(self.prior_k.ppf(prec), self.prior_k.ppf(1 - prec), n_samples)
+            self.thetas = np.linspace(self.prior_th.ppf(prec), self.prior_th.ppf(1 - prec), n_samples)
+
+            # there is a function for the NB evidence integrant function: likelihood(x | params) * prior(params)
+            joint_pdf = np.zeros((self.ks.size, self.thetas.size))
+
+            # calculate likelihodd times prior for every grid value
+            with tqdm.tqdm(total=self.ks.size * self.thetas.size, desc='calculating posterior') as pbar:
+
+                for i, k in enumerate(self.ks):
+                    for j, th in enumerate(self.thetas):
+                        r = k
+                        p = th / (1 + th)
+                        joint_pdf[i, j] = nb_evidence_integrant_direct(r, p, self.xo, self.prior_k, self.prior_th)
+                        pbar.update()
+
+            # calculate the evidence as the integral over the grid of likelihood * prior values
+            self.evidence = np.trapz(np.trapz(joint_pdf, x=self.thetas, axis=1), x=self.ks, axis=0)
+            self.joint_pdf = joint_pdf / self.evidence
+        else:
+            print('already done')
+
+    def eval(self, x):
+        """
+        Evaluate the joint pdf for value pairs given in x.
+        :param x: np.array, shape (n, 2)
+        :return: pdf values, np array, shape (n, )
+        """
+        assert self.calculated, 'calculate the joint posterior first using calculate_exaxt_posterior'
+        assert x.ndim == 2, 'x should have two dimensions, (n_samples, 2)'
+        assert x.shape[1] == 2, 'each datum should have two entries, [k, theta]'
+
+        pdf_values = []
+        # for each pair of (k, theta)
+        for xi in x:
+            # look up indices in the ranges
+            idx_k = np.where(self.ks >= xi[0])
+            idx_th = np.where(self.thetas >= xi[1])
+
+            # take corresponding pdf values from pdf grid
+            pdf_values.append(self.joint_pdf[idx_k, idx_th])
+
+        return np.array(pdf_values)
+
+    def gen(self, n_samples):
+        """
+        Generate samples under the joint pdf grid using inverse transform sampling
+        :param n_samples:
+        :return:
+        """
+
+        assert self.calculated, 'calculate the joint posterior first using calculate_exaxt_posterior'
+        self.samples_generated = True
+
+        # generate new samples
+        samples = inverse_transform_sampling_2d(self.ks, self.thetas, self.joint_pdf, n_samples).tolist()
+
+        # add to list of all samples
+        self.samples += samples
+
+        return np.array(self.samples)
+
+    @property
+    def mean(self):
+        assert self.samples_generated, 'generate samples first, using gen()'
+        return np.mean(self.samples, axis=0)
+
+    @property
+    def std(self):
+        assert self.samples_generated, 'generate samples first, using gen()'
+        return np.cov(np.array(self.samples).T)
