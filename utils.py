@@ -832,3 +832,75 @@ def calculate_ppf_from_samples(qs, samples):
         values[i] = bins[quantile_idx]
 
     return values
+
+
+def inverse_transform_sampling_1d(array, pdf_array, n_samples):
+    """
+    Generate samples from an arbitrary 1D distribution given an array of pdf values. Using inverse transform sampling.
+
+    Calculates CDF by summing up values in the PDF. Assumes values in array and PDF are spaced uniformly.
+
+    :param array: array of RV values covering a representative range
+    :param pdf_array: the corresponding PDF values of the values in 'array'.
+    :param n_samples: number of samples to generate
+    :return: array-like, array of pseudo-randomly generated sampled.
+    """
+    uniform_samples = scipy.stats.uniform.rvs(size=n_samples)
+    samples = np.zeros(n_samples)
+    # calculate the cdf by taking the cumsum and normaliying by dt
+    cdf = np.cumsum(pdf_array) * (array[1] - array[0])
+
+    for i, s in enumerate(uniform_samples):
+        # find idx in cmf
+        idx = np.where(cdf >= s)[0][0]
+        # add the corresponding value
+        samples[i] = array[idx]
+
+    return samples
+
+
+def inverse_transform_sampling_2d(x1, x2, joint_pdf, n_samples):
+    """
+    Generate samples from an arbitrary 2D distribution f(x, y) given a matrix of joint density values.
+
+    Using 2D inverse transform sampling: Calculate the marginal p(x1) and the condition p(x2 | x1). Generate
+    pseudo random samples from the x1 marginal. Then generate pseudo-random samples from the conditional, each sample
+    conditioned on a x1 sample of the previos step.
+    :param x1: values of RV x1
+    :param x2: values of RV x2
+    :param joint_pdf: 2D array of PDF values corresponding to the bins defined in x1 and x2
+    :param n_samples: number of samples to draw
+    :return:
+    """
+
+    # calculate marginal of x1 by integrating over x2
+    x1_pdf = np.trapz(joint_pdf, x=x2, axis=1)
+
+    # sample from marginal
+    samples_x1 = inverse_transform_sampling_1d(x1, x1_pdf, n_samples)
+
+    # calculate the conditional of x2 given x1 using Bayes rule
+    # this gives a matrix of pdf, one for each values of x1 that we condition on.
+    x2_pdf = np.zeros_like(joint_pdf)
+    # condition on every x1
+    for i in range(x1.size):
+        # conditioned on this x1, apply Bayes
+        x2_pdf[i,] = joint_pdf[i, :] / x1_pdf[i]
+
+    # get the cdf by summing along x2 dimension
+    x2_cdf = np.cumsum(x2_pdf, axis=1) * (x2[1] - x2[0])
+
+    # sample new uniform numbers
+    uniform_samples = scipy.stats.uniform.rvs(size=n_samples)
+
+    samples_x2 = []
+    for uni_sample, x1_sample in zip(uniform_samples, samples_x1):
+        # get the index of the x1 sample for conditioning
+        idx_x1 = np.where(x1 >= x1_sample)[0][0]
+        # find idx in conditional cmf
+        idx_u = np.where(x2_cdf[idx_x1,] >= uni_sample)[0][0]
+
+        # add the corresponding value
+        samples_x2.append(x2[idx_u])
+
+    return np.vstack((samples_x1, np.array(samples_x2)))
