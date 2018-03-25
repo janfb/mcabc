@@ -548,6 +548,14 @@ def sample_poisson(prior, n_samples, sample_size):
 
 
 def sample_poisson_gamma_mixture(prior_k, prior_theta, n_samples, sample_size):
+    """
+    Generate samples from negative binomial distribution with specified priors.
+    :param prior_k: scipy.stats.gamma object with parameters set. prior on Gamma shape
+    :param prior_theta: scipy.stats.gamma object with parameters set. prior on Gamma scale
+    :param n_samples: number of data sets sampled
+    :param sample_size: number of samples per data set
+    :return: parameters, data_sets
+    """
     thetas = []
     samples = []
 
@@ -722,10 +730,10 @@ def calculate_nb_evidence(x, k_k, theta_k, k_theta, theta_theta, log=False):
     prior_theta = scipy.stats.gamma(a=k_theta, scale=theta_theta)
 
     (evidence, err) = scipy.integrate.dblquad(func=nb_evidence_integrant_direct,
-                                           a=theta_start / (1 + theta_start),
-                                           b=theta_end / (1 + theta_end),
-                                           gfun=lambda x: k_start, hfun=lambda x: k_end,
-                                           args=[x, prior_k, prior_theta])
+                                              a=theta_start / (1 + theta_start),
+                                              b=theta_end / (1 + theta_end),
+                                              gfun=lambda x: k_start, hfun=lambda x: k_end,
+                                              args=[x, prior_k, prior_theta])
 
     return np.log(evidence) if log else evidence
 
