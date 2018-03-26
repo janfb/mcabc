@@ -2,6 +2,7 @@ import numpy as np
 import scipy.stats
 import torch
 import torch.nn as nn
+import tqdm
 
 import delfi.distribution as dd
 from torch.autograd import Variable
@@ -30,24 +31,24 @@ class Trainer:
 
         loss_trace = []
 
-        for epoch in range(n_epochs):
-            bgen = batch_generator(dataset_train, n_minibatch)
+        with tqdm.tqdm(total=n_epochs, disable=not self.verbose,
+                       desc='training') as pbar:
+            for epoch in range(n_epochs):
+                bgen = batch_generator(dataset_train, n_minibatch)
 
-            for j, (x_batch, y_batch) in enumerate(bgen):
-                x_var = Variable(torch.Tensor(x_batch))
-                y_var = Variable(self.target_type(y_batch))
+                for j, (x_batch, y_batch) in enumerate(bgen):
+                    x_var = Variable(torch.Tensor(x_batch))
+                    y_var = Variable(self.target_type(y_batch))
 
-                model_params = self.model(x_var)
-                loss = self.model.loss(model_params, y_var)
+                    model_params = self.model(x_var)
+                    loss = self.model.loss(model_params, y_var)
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    self.optimizer.step()
 
-                loss_trace.append(loss.data.numpy())
-
-            if (epoch + 1) % 100 == 0 and self.verbose:
-                print("[epoch %04d] loss: %.4f" % (epoch + 1, loss.data[0]))
+                    loss_trace.append(loss.data.numpy())
+                pbar.update()
 
         self.loss_trace = loss_trace
 
@@ -279,7 +280,6 @@ class PytorchMultivariateMoG:
             mean += (self.alphas[:, k] * self.mus[:, :, k]).data.numpy().squeeze()
         return mean
 
-
     def pdf(self, y, log=True):
         # get params: batch size N, ndims D, ncomponents K
         N, D, K = self.mus.size()
@@ -365,6 +365,65 @@ class PytorchMultivariateMoG:
             quantiles += alpha * scipy.stats.multivariate_normal.cdf(x=x, mean=mean, cov=S)
 
         return quantiles
+
+    def get_quantile_per_variable(self, x):
+        """
+        Calculate the quantile of each parameter component in x, under the corresponding marginal of that component.
+
+        :param x: (n_samples, ndims), ndims is the number of variables the MoG is defined for, e.g., k and theta,
+        :return: quantile for every sample and for every variable of the MoG, (n_samples, ndims).
+        """
+        # for each variable, get the marginal and take the quantile weighted over components
+
+        quantiles = np.zeros_like(x)
+
+        for k in range(self.n_components):
+            alpha = self.alphas[:, k].data.numpy()[0]
+            mean = self.mus[:, :, k].data.numpy().squeeze()
+            U = self.Us[:, k, :, :].data.numpy().squeeze()
+            # get cov from Choleski transform
+            C = np.linalg.inv(U.T)
+            # covariance matrix
+            S = np.dot(C.T, C)
+
+            # for each variable
+            for vi in range(self.ndims):
+                # the marginal is a univariate Gaussian with the sub mean and covariance
+                marginal = scipy.stats.norm(loc=mean[vi], scale=np.sqrt(S[vi, vi]))
+                # the quantile under the marginal of vi for this component, for all n_samples
+                q = marginal.cdf(x=x[:, vi])
+                # take sum, weighted with component weight alpha
+                quantiles[:, vi] += alpha * q
+
+        return quantiles
+
+    def get_marginals(self):
+        """
+        Return a list of PytorchUnivariateMoG holding the marginals of this PytorchMultivariateMoG.
+        :return: list
+        """
+        assert self.nbatch == 1, 'this defined only for a single data point MoG'
+        sigmas = np.zeros((self.ndims, self.n_components))
+        # get sigma for every component
+        for k in range(self.n_components):
+            U = self.Us[:, k, :, :].data.numpy().squeeze()
+            # get cov from Choleski transform
+            C = np.linalg.inv(U.T)
+            # covariance matrix
+            S = np.dot(C.T, C)
+            # the diagonal element is the variance of each variable, take sqrt to get std.
+            sigmas[:, k] = np.sqrt(np.diag(S))
+
+        # for each variable
+        marginals = []
+        for vi in range(self.ndims):
+            # take the corresponding mean component, the sigma component extracted above. for all MoG compoments.
+            m = self.mus[:, vi, :]
+            std = Variable(torch.Tensor(sigmas[vi,].reshape(1, -1)))
+            marg = PytorchUnivariateMoG(mus=m, sigmas=std, alphas=self.alphas)
+            marginals.append(marg)
+
+        return marginals
 
 
 class UnivariateMogMDN(nn.Module):
