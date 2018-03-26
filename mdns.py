@@ -6,7 +6,7 @@ import tqdm
 
 import delfi.distribution as dd
 from torch.autograd import Variable
-from model_comparison.utils import multivariate_normal_pdf, my_log_sum_exp, batch_generator
+from model_comparison.utils import *
 
 
 class Trainer:
@@ -130,6 +130,30 @@ class PytorchUnivariateMoG:
         else:
             return p_samples
 
+    def gen(self, n_samples):
+        """
+        Generate samples from the MoG.
+        :param n_samples:
+        :return:
+        """
+
+        # get the number of samples per component, according to mixture weights alpha
+        ns = np.random.multinomial(n_samples, pvals=self.alphas.data.numpy().squeeze())
+
+        # sample for each component
+        samples = []
+        for k, n in enumerate(ns):
+            # construct scipy object
+            mean = self.mus[0, k].data.numpy()
+            sigma = self.sigmas[0, k].data.numpy()
+            # add samples to list
+            samples += scipy.stats.norm.rvs(loc=mean, scale=sigma, size=n).tolist()
+
+        # shuffle and return
+        np.random.shuffle(samples)
+
+        return np.array(samples)
+
     @staticmethod
     def normal_pdf(y, mus, sigmas, log=True):
         result = -0.5 * torch.log(2 * np.pi * sigmas ** 2) - 1 / (2 * sigmas ** 2) * (y.expand_as(mus) - mus) ** 2
@@ -144,14 +168,31 @@ class PytorchUnivariateMoG:
         :param q: the quantile value, e.g., .95, .5 etc.
         :return: the parameter value, e.g., the value corresponding to q amount of mass
         """
-        # get delfi object
-        delfi_mog = self.get_dd_object()
+        raise NotImplementedError()
 
-        # project to single gaussian
-        g = delfi_mog.project_to_gaussian()
+    def calculate_credible_interval_counts(self, theta_o, intervals):
+        """
+        Credible interval count for theta_o.
 
-        # use scipy norm ppf fun
-        return scipy.stats.norm.ppf(q, loc=g.mean, scale=g.std)
+        For a given theta_o and a list of credible intervals, check whether theta_o falls into the interval, for each
+        interval. Return a binary vector indicating success
+        :param theta_o: float
+        :param intervals: np array
+        :return: np array, shape as intervals.
+        """
+
+        # for each interval. intervals are defined in mass. we need the tails, left and right of the interval
+        tails = (1 - intervals) / 2.
+
+        # generate samples to approximate the inverse cdf
+        samples = self.gen(10000)
+        print(samples.shape)
+
+        lows = calculate_ppf_from_samples(tails, samples)
+        highs = calculate_ppf_from_samples(1 - tails, samples)
+        counts = np.ones_like(intervals) * np.logical_and(lows <= theta_o, theta_o <= highs)
+
+        return counts
 
     def get_quantile(self, x):
         """
@@ -424,6 +465,35 @@ class PytorchMultivariateMoG:
             marginals.append(marg)
 
         return marginals
+
+    def gen(self, n_samples):
+        """
+        Generate samples from the MoG.
+        :param n_samples:
+        :return:
+        """
+
+        # get the number of samples per component, according to mixture weights alpha
+        ns = np.random.multinomial(n_samples, pvals=self.alphas.data.numpy().squeeze())
+
+        # sample for each component
+        samples = []
+        for k, n in enumerate(ns):
+            # construct scipy object
+            mean = self.mus[:, :, k].data.numpy().squeeze()
+            U = self.Us[:, k, :, :].data.numpy().squeeze()
+            # get cov from Choleski transform
+            C = np.linalg.inv(U.T)
+            S = np.dot(C.T, C)
+
+            # add samples to list
+            samples += scipy.stats.multivariate_normal.rvs(mean=mean, cov=S, size=n).tolist()
+
+        # shuffle and return
+        np.random.shuffle(samples)
+
+        return samples
+
 
 
 class UnivariateMogMDN(nn.Module):
