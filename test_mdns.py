@@ -154,3 +154,18 @@ class TestMDNs(TestCase):
         quantiles = pp.get_quantile(np.reshape([lower, upper], (2, -1)))
 
         assert np.isclose(quantiles, [0., 1.]).all(), 'quantiles should be close to [0, 1.], but {}'.format(quantiles)
+
+    def test_multivariate_get_quantile_per_variable(self):
+
+        model = MultivariateMogMDN(ndim_input=2, ndim_output=2, n_components=1)
+
+        pp = model.predict([[1., 1.]])
+
+        # just test the outer edges and the mean
+        lower = pp.mean - 1e4
+        upper = pp.mean + 1e4
+        m = pp.mean
+
+        quantiles = pp.get_quantile_per_variable(np.reshape([lower, upper, m], (3, -1)))
+
+        assert np.isclose(quantiles, [[0., 0.], [1., 1.], [.5, .5]]).all(), 'incorrect quantiles: {}'.format(quantiles)

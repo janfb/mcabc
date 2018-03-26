@@ -787,12 +787,12 @@ def calculate_dkl(p, q):
     return dkl
 
 
-def calculate_credible_intervals_success(theta, ppf_fun, intervals, args):
+def calculate_credible_intervals_success(theta, ppf_fun, intervals, args=None):
     """
     Calculate credible intervals given a true parameter value and a percent point function of a distribution
     :param theta: true parameter
     :param ppf_fun: percent point function (inverse CDF)
-    :param intervals: credible intervals to be calculated
+    :param intervals: array-like, credible intervals to be calculated
     :param args: arguments to the ppf function
     :return: a binary vector, same length as intervals, indicating whether the true parameter lies in that interval
     """
@@ -807,11 +807,10 @@ def calculate_credible_intervals_success(theta, ppf_fun, intervals, args):
 
 def calculate_ppf_from_samples(qs, samples):
     """
-    Given quantiles and a delfi distribution mog, calculate values corresponding to the quantiles by approximating the
-    MoG inverse CDF via sampling.
+    Given quantiles and samples, calculate values corresponding to the quantiles by approximating the
+    MoG inverse CDF from samples.
     :param qs: quantiles, array-like
-    :param mog: delfi.distribution.MoG object
-    :param n_samples: number of samples used to for sampling
+    :param samples: number of samples used to for sampling
     :return: corresponding values, array-like
     """
 
@@ -824,7 +823,7 @@ def calculate_ppf_from_samples(qs, samples):
     bin_idx = np.digitize(samples, bins)
     # count samples per bin --> histogram
     n = np.bincount(bin_idx.squeeze())
-    # take the normalized cum sum as the pdf
+    # take the normalized cum sum as the cdf
     cdf = np.cumsum(n) / np.sum(n)
 
     # for every quantile, get the corresponding value on the cdf
@@ -939,12 +938,13 @@ class NBExactPosterior:
         # prelocate
         self.evidence = None
         self.joint_pdf = None
+        self.joint_cdf = None
         self.ks = None
         self.thetas = None
 
         self.samples = []
 
-    def calculat_exact_posterior(self, n_samples=200, prec=1e-4):
+    def calculat_exact_posterior(self, n_samples=200, prec=1e-4, verbose=True):
         """
         Calculate the exact posterior.
         :param n_samples: the number of entries per dimension on the joint_pdf grid
@@ -959,11 +959,11 @@ class NBExactPosterior:
             self.ks = np.linspace(self.prior_k.ppf(prec), self.prior_k.ppf(1 - prec), n_samples)
             self.thetas = np.linspace(self.prior_th.ppf(prec), self.prior_th.ppf(1 - prec), n_samples)
 
-            # there is a function for the NB evidence integrant function: likelihood(x | params) * prior(params)
             joint_pdf = np.zeros((self.ks.size, self.thetas.size))
 
             # calculate likelihodd times prior for every grid value
-            with tqdm.tqdm(total=self.ks.size * self.thetas.size, desc='calculating posterior') as pbar:
+            with tqdm.tqdm(total=self.ks.size * self.thetas.size, desc='calculating posterior',
+                           disable=not verbose) as pbar:
 
                 for i, k in enumerate(self.ks):
                     for j, th in enumerate(self.thetas):
@@ -975,10 +975,18 @@ class NBExactPosterior:
             # calculate the evidence as the integral over the grid of likelihood * prior values
             self.evidence = np.trapz(np.trapz(joint_pdf, x=self.thetas, axis=1), x=self.ks, axis=0)
             self.joint_pdf = joint_pdf / self.evidence
+
+            # calculate cdf
+            # Calculate CDF by taking cumsum on each axis
+            s1 = np.cumsum(np.cumsum(self.joint_pdf, axis=0), axis=1)
+            s2 = np.cumsum(np.cumsum(self.joint_pdf, axis=1), axis=0)
+            # approximate cdf by sum times dt
+            dts = (self.ks[1] - self.ks[0]) * (self.thetas[1] - self.thetas[0])
+            self.joint_cdf = (s1 + s2) / 2 * dts
         else:
             print('already done')
 
-    def eval(self, x):
+    def eval(self, x, log=False):
         """
         Evaluate the joint pdf for value pairs given in x.
         :param x: np.array, shape (n, 2)
@@ -998,7 +1006,42 @@ class NBExactPosterior:
             # take corresponding pdf values from pdf grid
             pdf_values.append(self.joint_pdf[idx_k, idx_th])
 
-        return np.array(pdf_values)
+        return np.log(np.array(pdf_values)) if log else np.array(pdf_values)
+
+    # to mimic scipy.stats behavior
+    def pdf(self, x):
+        """
+        Evaluate pdf at x
+        :param x: samples
+        :return: density values
+        """
+        return self.eval(x)
+
+    def logpdf(self, x):
+        """
+        Evaluate log density at x
+        :param x: samples
+        :return: log density
+        """
+        return self.eval(x, log=True)
+
+    def ppf(self, q):
+        """
+        Percent point function at q, or inverse CDF. Approximated by looking up the index in the cdf table
+        that is closest to q.
+        :param q: quantile
+        :return: corresponding value on the RV range
+        """
+        q = np.atleast_1d(q)
+
+        # look up the index of the quantile in the 2D CDF grid
+        values = []
+        for qi in q:
+            # find index in grid for every dimension
+            idx1, idx2 = np.where(self.joint_cdf >= qi)
+            values.append([self.ks[idx1[0]], self.thetas[idx2[0]]])
+
+        return np.array(values)
 
     def gen(self, n_samples):
         """
@@ -1021,9 +1064,86 @@ class NBExactPosterior:
     @property
     def mean(self):
         assert self.samples_generated, 'generate samples first, using gen()'
-        return np.mean(self.samples, axis=0)
+        return np.mean(self.samples, axis=0).reshape(-1)
 
     @property
     def std(self):
         assert self.samples_generated, 'generate samples first, using gen()'
-        return np.cov(np.array(self.samples).T)
+        return np.sqrt(np.diag(np.cov(np.array(self.samples).T))).reshape(-1)
+
+
+class Distribution:
+    """
+    Class for arbitrary distribution defined in terms of an array of pdf values. Used for representing the marginals
+    of the numerically calculated NB posterior.
+    """
+
+    def __init__(self, support_array, pdf_array):
+
+        self.support = support_array
+        self.pdf_array = pdf_array
+
+        self.cdf_array = np.cumsum(self.pdf_array) * (self.support[1] - self.support[0])
+
+    def eval(self, x, log=False):
+
+        pdf_values = []
+        # for each sample
+        for xi in x:
+            # look up index in the supported range
+            idx_i = np.where(self.support >= xi)
+
+            # take corresponding pdf value from pdf
+            pdf_values.append(self.pdf_array[idx_i])
+
+        return np.log(np.array(pdf_values)) if log else np.array(pdf_values)
+
+    def pdf(self, x):
+        return self.eval(x)
+
+    def logpdf(self, x):
+        return self.eval(x, log=True)
+
+    def gen(self, n_samples):
+        """
+        Generate samples under the pdf using inverse transform sampling
+        :param n_samples:
+        :return: array-like, samples
+        """
+        return inverse_transform_sampling_1d(self.support, self.pdf_array, n_samples=n_samples)
+
+    def ppf(self, qs):
+        """
+        Percent point function at q, or inverse CDF. Approximated by looking up the index in the cdf table
+        that is closest to q.
+        :param q: quantile
+        :return: corresponding value on the RV range
+        """
+        q = np.atleast_1d(qs)
+
+        # look up the index of the quantile in the 2D CDF grid
+        values = []
+        for q in qs:
+            # find index in grid for every dimension
+            idx1 = np.where(self.cdf_array >= q)[0][0]
+            values.append(self.support[idx1])
+
+        return np.array(values)
+
+    def cdf(self, xs):
+        """
+        Evaluate CDF at every x in xs. Approximated by looking up the index in the cdf array.
+        :param xs: RV values to evaluate
+        :return: quantiles in [0, 1]
+        """
+        # make it an array in case it is a scalar.
+        xs = np.atleast_1d(xs)
+
+        cdf_values = []
+        for xi in xs:
+            # look up index in the support array
+            idx = np.where(self.support >= xi)[0][0]
+            # get the corresponding quantile
+            cdf_values.append(self.cdf_array[idx])
+
+        return np.array(cdf_values)
