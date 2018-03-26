@@ -2,6 +2,7 @@ import numpy as np
 import scipy.stats
 
 from multiprocessing import Pool
+from model_comparison.utils import NBExactPosterior
 
 
 class BaseModel:
@@ -94,3 +95,19 @@ class NegativeBinomialModel(BaseModel):
             sample.append(self.rng.poisson(lam=self.rng.gamma(shape=shape, scale=scale)))
 
         return sample
+
+    def get_exact_posterior(self, x_obs, prior_k, prior_theta):
+        """
+        Get the exact posterior by numerical integration given the observed data and the priors
+        :param x_obs: observed data, array of counts
+        :param prior_k: scipy.stats.gamma object
+        :param prior_theta: scipy.stats.gamma object
+        :return: NBExactPosterior object with calculated posterior and samples
+        """
+        post = NBExactPosterior(x_obs, prior_k, prior_theta)
+        # calculate posterior
+        post.calculat_exact_posterior(verbose=False)
+        # generate a lot of samples to approximate the mean
+        samples = post.gen(10000)
+
+        return post
