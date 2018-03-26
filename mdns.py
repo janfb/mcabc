@@ -170,28 +170,28 @@ class PytorchUnivariateMoG:
         """
         raise NotImplementedError()
 
-    def calculate_credible_interval_counts(self, theta_o, intervals):
+    def get_credible_interval_counts(self, theta_o, intervals):
         """
-        Credible interval count for theta_o.
+        Count whether a parameter falls in different credible intervals.
 
-        For a given theta_o and a list of credible intervals, check whether theta_o falls into the interval, for each
-        interval. Return a binary vector indicating success
-        :param theta_o: float
+        Counting is done without sampling. Just look up the quantile q of theta. Then q mass lies below theta. If q is
+        smaller than 0.5, then this is a tail and 1 - 2*tail is the CI. If q is greater than 0.5, then 1 - q is a tail
+        and 1 - 2*tail is the CI.
+        :param theta_o: parameter for which to calculate the CI counts, float
         :param intervals: np array
-        :return: np array, shape as intervals.
+        :return: np array of {0, 1} for counts
         """
+        # get the quantile of theta
+        q = self.get_quantile(theta_o)
 
-        # for each interval. intervals are defined in mass. we need the tails, left and right of the interval
-        tails = (1 - intervals) / 2.
-
-        # generate samples to approximate the inverse cdf
-        samples = self.gen(10000)
-        print(samples.shape)
-
-        lows = calculate_ppf_from_samples(tails, samples)
-        highs = calculate_ppf_from_samples(1 - tails, samples)
-        counts = np.ones_like(intervals) * np.logical_and(lows <= theta_o, theta_o <= highs)
-
+        # q mass lies below th, therefore the CI is
+        if q > 0.5:
+            # for q > .5, 1 - how much mass is above q times 2 (2 tails)
+            ci = 1 - 2 * (1 - q)
+        else:
+            # how much mass is below, times 2 (2 tails)
+            ci = 1 - 2 * q
+        counts = np.ones_like(intervals) * (intervals>= ci)
         return counts
 
     def get_quantile(self, x):
