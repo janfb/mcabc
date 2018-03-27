@@ -347,17 +347,18 @@ class PytorchMultivariateMoG:
     def eval_numpy(self, samples):
         # eval existing posterior for some params values and return pdf values in numpy format
 
-        p_samples = np.zeros(samples.shape)
+        p_samples = np.zeros(samples.shape[:-1])
 
         # for every component
         for k in range(self.n_components):
-            alpha = self.alphas[0, k].data.numpy()
-            mean = self.mus[0, :, k].data.numpy()
-            U = self.Us[0, k,].data.numpy()
+            alpha = self.alphas[:, k].data.numpy()[0]
+            mean = self.mus[:, :, k].data.numpy().squeeze()
+            U = self.Us[:, k, :, :].data.numpy().squeeze()
             # get cov from Choleski transform
-            cov = np.linalg.inv(U.T.dot(U))
+            C = np.linalg.inv(U).T
+            S = np.dot(C.T, C)
             # add to result, weighted with alpha
-            p_samples += alpha * scipy.stats.multivariate_normal.pdf(x=samples, mean=mean, cov=cov)
+            p_samples += alpha * scipy.stats.multivariate_normal.pdf(x=samples, mean=mean, cov=S)
 
         return p_samples
 
@@ -406,6 +407,28 @@ class PytorchMultivariateMoG:
             quantiles += alpha * scipy.stats.multivariate_normal.cdf(x=x, mean=mean, cov=S)
 
         return quantiles
+
+    def check_credible_regions(self, theta_o, credible_regions):
+        """
+        Count whether a parameter falls in different credible regions.
+
+        Counting is done without sampling. Just look up the quantile q of theta. Then q mass lies below theta. If q is
+        smaller than 0.5, then this is a tail and 1 - 2*tail is the CR. If q is greater than 0.5, then 1 - q is a tail
+        and 1 - 2*tail is the CR.
+        :param theta_o: parameter for which to calculate the CR counts, float
+        :param credible_regions: np array of masses that define the CR
+        :return: np array of {0, 1} for counts
+        """
+
+        q = self.get_quantile(theta_o.reshape(1, -1))
+        if q > 0.5:
+            # the mass in the CR is 1 - how much mass is above times 2
+            cr_mass = 1 - 2 * (1 - q)
+        else:
+            # or 1 - how much mass is below, times 2
+            cr_mass = 1 - 2 * q
+        counts = np.ones_like(credible_regions) * (credible_regions > cr_mass)
+        return counts
 
     def get_quantile_per_variable(self, x):
         """
@@ -493,7 +516,6 @@ class PytorchMultivariateMoG:
         np.random.shuffle(samples)
 
         return samples
-
 
 
 class UnivariateMogMDN(nn.Module):
