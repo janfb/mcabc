@@ -8,7 +8,7 @@ from random import shuffle
 from scipy.stats import gamma, beta, nbinom, poisson
 import scipy
 import scipy.integrate
-from scipy.special import gammaln, betaln
+from scipy.special import gammaln, betaln, digamma
 import matplotlib.pyplot as plt
 import os
 
@@ -766,6 +766,11 @@ def get_mog_posterior(model, stats_o, thetas):
     return post
 
 
+def calculate_gamma_dkl(k1, theta1, k2, theta2):
+    return (k1 - k2) * digamma(k1) - gammaln(k1) + gammaln(k2) + \
+           k2 * (np.log(theta2) - np.log(theta1)) + k1 * (theta1 - theta2) / theta2
+
+
 def calculate_dkl(p, q):
     """
     Calculate dkl between p and q.
@@ -803,6 +808,20 @@ def calculate_credible_intervals_success(theta, ppf_fun, intervals, args=None):
     success = np.ones_like(intervals) * np.logical_and(lows <= theta, theta <= highs)
 
     return success
+
+
+def check_credible_regions(theta_o, cdf_fun, credible_regions):
+
+    q = cdf_fun(theta_o)
+
+    if q > 0.5:
+        # the mass in the CR is 1 - how much mass is above times 2
+        cr_mass = 1 - 2 * (1 - q)
+    else:
+        # or 1 - how much mass is below, times 2
+        cr_mass = 1 - 2 * q
+    counts = np.ones_like(credible_regions) * (credible_regions > cr_mass)
+    return counts
 
 
 def calculate_ppf_from_samples(qs, samples):
@@ -979,10 +998,8 @@ class NBExactPosterior:
             # calculate cdf
             # Calculate CDF by taking cumsum on each axis
             s1 = np.cumsum(np.cumsum(self.joint_pdf, axis=0), axis=1)
-            s2 = np.cumsum(np.cumsum(self.joint_pdf, axis=1), axis=0)
-            # approximate cdf by sum times dt
-            dts = (self.ks[1] - self.ks[0]) * (self.thetas[1] - self.thetas[0])
-            self.joint_cdf = (s1 + s2) / 2 * dts
+            # approximate cdf by summation and normalization
+            self.joint_cdf = s1 / s1.max()
         else:
             print('already done')
 
@@ -1043,6 +1060,21 @@ class NBExactPosterior:
 
         return np.array(values)
 
+    def cdf(self, x):
+
+        x = np.atleast_1d(x)
+        qs = []
+
+        for xi in x:
+            # find idx of x on the cdf grid
+            idx_k = np.where(self.ks >= xi[0])[0][0]
+            idx_th = np.where(self.thetas >= xi[1])[0][0]
+
+            # get value from cdf
+            qs.append(self.joint_cdf[idx_k, idx_th])
+
+        return np.array(qs)
+
     def gen(self, n_samples):
         """
         Generate samples under the joint pdf grid using inverse transform sampling
@@ -1071,6 +1103,13 @@ class NBExactPosterior:
         assert self.samples_generated, 'generate samples first, using gen()'
         return np.sqrt(np.diag(np.cov(np.array(self.samples).T))).reshape(-1)
 
+    def get_marginals(self):
+
+        k_pdf = np.trapz(self.joint_pdf, x=self.thetas, axis=1)
+        th_pdf = np.trapz(self.joint_pdf, x=self.ks, axis=0)
+
+        return [Distribution(self.ks, k_pdf), Distribution(self.thetas, th_pdf)]
+
 
 class Distribution:
     """
@@ -1083,7 +1122,8 @@ class Distribution:
         self.support = support_array
         self.pdf_array = pdf_array
 
-        self.cdf_array = np.cumsum(self.pdf_array) * (self.support[1] - self.support[0])
+        self.cdf_array = np.cumsum(self.pdf_array)
+        self.cdf_array /= self.cdf_array.max()
 
     def eval(self, x, log=False):
 
