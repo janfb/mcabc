@@ -626,11 +626,11 @@ class MultivariateMogMDN(nn.Module):
         U_mat = Variable(torch.zeros(batch_size, self.n_components, self.ndims, self.ndims))
 
         # assign vector to upper triangle of U
-        (idx1, idx2) = np.triu_indices(self.ndims)
-        U_mat[:, :, idx1, idx2] = U_vec
+        (idx1, idx2) = np.triu_indices(self.ndims)  # get indices of upper triangle, including diagonal
+        U_mat[:, :, idx1, idx2] = U_vec  # assign vector elements to upper triangle
         # apply exponential to get positive diagonal
-        (idx1, idx2) = np.diag_indices(self.ndims)
-        U_mat[:, :, idx1, idx2] = torch.exp(U_mat[:, :, idx1, idx2])
+        (idx1, idx2) = np.diag_indices(self.ndims)  # get indices of diagonal elements
+        U_mat[:, :, idx1, idx2] = torch.exp(U_mat[:, :, idx1, idx2])  # apply exponential to diagonal
 
         return out_mu, U_mat, out_alpha
 
