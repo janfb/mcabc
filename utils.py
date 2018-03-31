@@ -771,6 +771,47 @@ def calculate_gamma_dkl(k1, theta1, k2, theta2):
            k2 * (np.log(theta2) - np.log(theta1)) + k1 * (theta1 - theta2) / theta2
 
 
+def calculate_dkl_1D_scipy(p_pdf_array, q_pdf_array):
+    """
+    Calculate DKL from array of pdf values.
+
+    The arrays should cover as much of the range as possible.
+    :param p_pdf_array:
+    :param q_pdf_array:
+    :return:
+    """
+    return scipy.stats.entropy(pk=p_pdf_array, qk=q_pdf_array)
+
+
+def calculate_dkl_monte_carlo(p, q, n_samples=10000):
+    """
+    Estimate the DKL between 1D RV p and q.
+
+    p and q need methods, .pdf() to evaluate the pdf at samples.
+    p needs a rvs() method for generating samples.
+
+    :param p: rv object with methods .rvs() and .pdf()
+    :param q:
+    :param n_samples:
+    :return:
+    """
+
+    # generate samples under p
+    x = p.rvs(n_samples)
+
+    # eval those under p and q
+    pp = p.pdf(x)
+    pq = q.pdf(x)
+
+    # estimate expectation of log
+    log = np.log(pp) - np.log(pq)
+    dkl = log.mean()
+    # estimate the standard error
+    stderr = log.std(ddof=1) / np.sqrt(n_samples)
+
+    return dkl, stderr
+
+
 def calculate_dkl(p, q):
     """
     Calculate dkl between p and q.
@@ -1095,12 +1136,14 @@ class NBExactPosterior:
 
     @property
     def mean(self):
-        assert self.samples_generated, 'generate samples first, using gen()'
+        if len(self.samples) == 0:
+            self.gen(1000)
         return np.mean(self.samples, axis=0).reshape(-1)
 
     @property
     def std(self):
-        assert self.samples_generated, 'generate samples first, using gen()'
+        if len(self.samples) == 0:
+            self.gen(1000)
         return np.sqrt(np.diag(np.cov(np.array(self.samples).T))).reshape(-1)
 
     def get_marginals(self):
@@ -1124,6 +1167,7 @@ class Distribution:
 
         self.cdf_array = np.cumsum(self.pdf_array)
         self.cdf_array /= self.cdf_array.max()
+        self.samples = []
 
     def eval(self, x, log=False):
 
@@ -1150,7 +1194,12 @@ class Distribution:
         :param n_samples:
         :return: array-like, samples
         """
-        return inverse_transform_sampling_1d(self.support, self.pdf_array, n_samples=n_samples)
+        # generate samples
+        samples = inverse_transform_sampling_1d(self.support, self.pdf_array, n_samples=n_samples).tolist()
+        # add to all samples
+        self.samples += samples
+
+        return samples
 
     def ppf(self, qs):
         """
@@ -1187,3 +1236,40 @@ class Distribution:
             cdf_values.append(self.cdf_array[idx])
 
         return np.array(cdf_values)
+
+    def get_credible_interval_counts(self, th, credible_intervals):
+        # get the quantile of theta
+
+        q = self.cdf(th)
+
+        # q mass lies below th, therefore the CI is
+        if q > 0.5:
+            # for q > .5, 1 - how much mass is above q times 2 (2 tails)
+            ci = 1 - 2 * (1 - q)
+        else:
+            # how much mass is below, times 2 (2 tails)
+            ci = 1 - 2 * q
+        counts = np.ones_like(credible_intervals) * (credible_intervals>= ci)
+        return counts
+
+    @property
+    def mean(self):
+        """
+        Mean estimated from samples
+        :return:
+        """
+        if len(self.samples) == 0:
+            self.gen(1000)
+
+        return np.mean(self.samples)
+
+    @property
+    def std(self):
+        """
+        Mean estimated from samples
+        :return:
+        """
+        if len(self.samples) == 0:
+            self.gen(1000)
+
+        return np.std(self.samples)

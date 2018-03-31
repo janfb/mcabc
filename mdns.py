@@ -252,6 +252,20 @@ class PytorchUnivariateMoG:
         # set up dd MoG object
         return dd.mixture.MoG(a=a, ms=ms, Ss=Ss)
 
+    def ztrans_inv(self, mean, std):
+        """
+        Apply inverse z transform.
+        :param mean: original mean
+        :param std: original std
+        :return: PytorchUnivariateMoG with transformed means and stds
+        """
+
+        # apply same transform to every component
+        new_mus = self.mus * std + mean
+        new_sigmas = self.sigmas * std
+
+        return PytorchUnivariateMoG(new_mus, new_sigmas, self.alphas)
+
 
 class PytorchUnivariateGaussian:
 
@@ -308,6 +322,9 @@ class PytorchMultivariateMoG:
         self.mus = mus
         self.Us = Us
         self.alphas = alphas
+
+        # prelocate covariance matrix for later calculation
+        self.Ss = None
 
         self.nbatch, self.ndims, self.n_components = mus.size()
 
@@ -516,6 +533,35 @@ class PytorchMultivariateMoG:
         np.random.shuffle(samples)
 
         return samples
+
+    def get_covariance(self):
+
+        Ss = np.zeros_like(self.Us.data.numpy())
+
+        for d in range(self.nbatch):
+            for k in range(self.n_components):
+                U = self.Us[d, k, ].data.numpy()
+                C = np.linalg.inv(U.T)
+                Ss[d, k, ] = np.dot(C.T, C)
+
+        self.Ss = Ss
+
+        return Ss
+
+    def ztrans_inv(self, mean, std):
+        # mus = []
+        # Us = []
+        # # for every component
+        # for k in range(self.n_components):
+        #
+        #     # get the new Gaussian
+        #     m = std * self.mus[:, k, :] + mean
+        #     Ss = np.outer(std, std) * self.get_covariance()
+        #
+        #
+        #
+        # return scipy.stats.multivariate_normal(mean=m, cov=cov)
+        pass
 
 
 class UnivariateMogMDN(nn.Module):
