@@ -234,10 +234,18 @@ class PytorchUnivariateMoG:
     @property
     def std(self):
         """
-        Scale of MoG
+        Scale of MoG. Formular from
+        https://stats.stackexchange.com/questions/16608/what-is-the-variance-of-the-weighted-mixture-of-two-gaussians
         :return:
         """
-        return np.sum([self.alphas[0][k] * self.sigmas[0][k] for k in range(self.n_components)]).data.numpy().squeeze()
+        a = self.alphas[0, :].data.numpy()
+        vars = self.sigmas[0, :].data.numpy()**2
+        ms = self.mus[0, :].data.numpy()
+
+        var = np.sum([a[k] * (vars[k] + ms[k]**2) for k in range(self.n_components)]) - \
+              np.sum([a[k] * ms[k] for k in range(self.n_components)])**2
+
+        return np.sqrt(var)
 
     def get_dd_object(self):
         """
@@ -548,7 +556,7 @@ class PytorchMultivariateMoG:
         for vi in range(self.ndims):
             # take the corresponding mean component, the sigma component extracted above. for all MoG compoments.
             m = self.mus[:, vi, :]
-            std = Variable(torch.Tensor(sigmas[vi,].reshape(1, -1)))
+            std = Variable(torch.Tensor(sigmas[vi, ].reshape(1, -1)))
             marg = PytorchUnivariateMoG(mus=m, sigmas=std, alphas=self.alphas)
             marginals.append(marg)
 

@@ -936,16 +936,17 @@ def inverse_transform_sampling_2d(x1, x2, joint_pdf, n_samples):
     # calculate the conditional of x2 given x1 using Bayes rule
     # this gives a matrix of pdf, one for each values of x1 that we condition on.
     x2_pdf = np.zeros_like(joint_pdf)
+    x2_cdf = np.zeros_like(joint_pdf)
     # condition on every x1
     for i in range(x1.size):
         # conditioned on this x1, apply Bayes
-        px1 = x1_pdf[i] if x1_pdf[i] > 0. else 1e-9
-        x2_pdf[i,] = joint_pdf[i, :] / px1
-
-    # get the cdf by summing along x2 dimension
-    x2_cdf = np.cumsum(x2_pdf, axis=1)
-    # normalize
-    x2_cdf /= np.max(x2_cdf)
+        px1 = x1_pdf[i] if x1_pdf[i] > 0. else 1e-12
+        x2_pdf[i, ] = joint_pdf[i, :] / px1
+        # get the corresponding cdf by cumsum and normalization
+        x2_cdf[i, ] = np.cumsum(x2_pdf[i,])
+        x2_cdf[i, ] /= np.max(x2_cdf[i,])
+        assert np.isclose(x2_cdf[i, 0], 0, atol=1e-5), 'cdf should go from 0 to 1, {}'.format(x2_cdf[i, 0])
+        assert np.isclose(x2_cdf[i, -1], 1, atol=1e-5), 'cdf should go from 0 to 1, {}'.format(x2_cdf[i, 0])
 
     # sample new uniform numbers
     uniform_samples = scipy.stats.uniform.rvs(size=n_samples)
@@ -1183,7 +1184,7 @@ class Distribution:
         # for each sample
         for xi in x:
             # look up index in the supported range
-            idx_i = np.where(self.support >= xi)
+            idx_i = np.where(self.support >= xi)[0][0]
 
             # take corresponding pdf value from pdf
             pdf_values.append(self.pdf_array[idx_i])
@@ -1203,9 +1204,9 @@ class Distribution:
         :return: array-like, samples
         """
         # generate samples
-        samples = inverse_transform_sampling_1d(self.support, self.pdf_array, n_samples=n_samples).tolist()
+        samples = inverse_transform_sampling_1d(self.support, self.pdf_array, n_samples=n_samples)
         # add to all samples
-        self.samples += samples
+        self.samples += samples.tolist()
 
         return samples
 
