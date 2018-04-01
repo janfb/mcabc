@@ -338,6 +338,54 @@ class PytorchMultivariateMoG:
             mean += (self.alphas[:, k] * self.mus[:, :, k]).data.numpy().squeeze()
         return mean
 
+    @property
+    def std(self):
+
+        if self.Ss is None:
+            Ss = self.get_Ss_from_Us()
+
+        S = self.get_covariance_matrix()
+
+        return np.sqrt(np.diag(S))
+
+    def get_covariance_matrix(self):
+        """
+        Calculate the overall covariance of the MoG.
+
+        The covariance of a set of RVs is the mean of the conditional covariances plus the covariances of
+        the conditional means.
+        The MoG is a weighted sum of Gaussian RVs. Therefore, the mean covariance are just the weighted sum of
+        component covariances, similar for the conditional means. See here for an explanantion:
+
+        https://math.stackexchange.com/questions/195911/covariance-of-gaussian-mixtures
+
+        :return: Overall covariance matrix
+        """
+        if self.Ss is None:
+            _ = self.get_Ss_from_Us()
+
+        assert self.nbatch == 1, 'covariance matrix is returned only for single batch sample, but ' \
+                                 'self.nbatch={}'.format(self.nbatch)
+
+        # assume single batch sample
+        batch_idx = 0
+        S = np.zeros((self.ndims, self.ndims))
+
+        a = self.alphas[batch_idx, :].data.numpy().squeeze()
+        mus = self.mus[batch_idx, :, :].data.numpy().squeeze()
+        ss = self.Ss[batch_idx, :, :, :].squeeze()
+
+        m = np.dot(a, mus.T)
+
+        # get covariance shifted by the means, weighted with alpha
+        for k in range(self.n_components):
+            S += a[k] * (ss[k, :, :] + np.outer(mus[:, k], mus[:, k]))
+
+        # subtract weighted means
+        S -= np.outer(m, m)
+
+        return S
+
     def pdf(self, y, log=True):
         # get params: batch size N, ndims D, ncomponents K
         N, D, K = self.mus.size()
@@ -570,7 +618,7 @@ class PytorchMultivariateMoG:
 
         :param mean: mean of the original distribution
         :param std: vector of standard deviations of the original distribution
-        :return: PytorchMultivariateMoG object with the original mean and variance. 
+        :return: PytorchMultivariateMoG object with the original mean and variance.
         """
 
         mus = np.zeros((self.nbatch, self.ndims, self.n_components))
