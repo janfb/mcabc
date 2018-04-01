@@ -119,16 +119,18 @@ class NegativeBinomialModel(BaseModel):
 
         return sample
 
-    def get_exact_posterior(self, x_obs, prior_k, prior_theta, prec=1e-5):
+    def get_exact_posterior(self, x_obs, prior_k, prior_theta, prec=1e-5, n_samples=200):
         """
-        Get the exact posterior by numerical integration given the observed data and the priors
+        Get the exact posterior by numerical integration given the observed data and the priors.
+
         :param x_obs: observed data, array of counts
         :param prior_k: scipy.stats.gamma object
         :param prior_theta: scipy.stats.gamma object
+        :param prec: lower and upper tails in the coverage of the priors
+        :param n_samples: number of sample points along each dimension of the grid
+
         :return: NBExactPosterior object with calculated posterior and samples
         """
+        # set up the posterior
         post = NBExactPosterior(x_obs, prior_k, prior_theta)
-        # calculate posterior
-        post.calculat_exact_posterior(verbose=False, prec=prec)
-
-        return post
+        return post.calculat_exact_posterior(verbose=False, prec=prec, n_samples=n_samples)

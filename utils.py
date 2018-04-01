@@ -783,31 +783,25 @@ def calculate_dkl_1D_scipy(p_pdf_array, q_pdf_array):
     return scipy.stats.entropy(pk=p_pdf_array, qk=q_pdf_array)
 
 
-def calculate_dkl_monte_carlo(p, q, n_samples=10000):
+def calculate_dkl_monte_carlo(x, p_pdf, q_pdf):
     """
     Estimate the DKL between 1D RV p and q.
 
-    p and q need methods, .pdf() to evaluate the pdf at samples.
-    p needs a rvs() method for generating samples.
-
-    :param p: rv object with methods .rvs() and .pdf()
-    :param q:
-    :param n_samples:
-    :return:
+    :param x: samples from p
+    :param p_pdf: pdf function for p
+    :param q_pdf: pdf function for q
+    :return: estimate of dkl, standard error
     """
 
-    # generate samples under p
-    x = p.rvs(n_samples)
-
     # eval those under p and q
-    pp = p.pdf(x)
-    pq = q.pdf(x)
+    pp = p_pdf(x)
+    pq = q_pdf(x)
 
     # estimate expectation of log
     log = np.log(pp) - np.log(pq)
     dkl = log.mean()
     # estimate the standard error
-    stderr = log.std(ddof=1) / np.sqrt(n_samples)
+    stderr = log.std(ddof=1) / np.sqrt(x.shape[0])
 
     return dkl, stderr
 
@@ -945,10 +939,13 @@ def inverse_transform_sampling_2d(x1, x2, joint_pdf, n_samples):
     # condition on every x1
     for i in range(x1.size):
         # conditioned on this x1, apply Bayes
-        x2_pdf[i,] = joint_pdf[i, :] / x1_pdf[i]
+        px1 = x1_pdf[i] if x1_pdf[i] > 0. else 1e-9
+        x2_pdf[i,] = joint_pdf[i, :] / px1
 
     # get the cdf by summing along x2 dimension
-    x2_cdf = np.cumsum(x2_pdf, axis=1) * (x2[1] - x2[0])
+    x2_cdf = np.cumsum(x2_pdf, axis=1)
+    # normalize
+    x2_cdf /= np.max(x2_cdf)
 
     # sample new uniform numbers
     uniform_samples = scipy.stats.uniform.rvs(size=n_samples)
@@ -1050,6 +1047,8 @@ class NBExactPosterior:
         :param x: np.array, shape (n, 2)
         :return: pdf values, np array, shape (n, )
         """
+
+        x = np.atleast_1d(x)
         assert self.calculated, 'calculate the joint posterior first using calculate_exaxt_posterior'
         assert x.ndim == 2, 'x should have two dimensions, (n_samples, 2)'
         assert x.shape[1] == 2, 'each datum should have two entries, [k, theta]'
@@ -1058,8 +1057,8 @@ class NBExactPosterior:
         # for each pair of (k, theta)
         for xi in x:
             # look up indices in the ranges
-            idx_k = np.where(self.ks >= xi[0])
-            idx_th = np.where(self.thetas >= xi[1])
+            idx_k = np.where(self.ks >= xi[0])[0][0]
+            idx_th = np.where(self.thetas >= xi[1])[0][0]
 
             # take corresponding pdf values from pdf grid
             pdf_values.append(self.joint_pdf[idx_k, idx_th])
@@ -1127,12 +1126,15 @@ class NBExactPosterior:
         self.samples_generated = True
 
         # generate new samples
-        samples = inverse_transform_sampling_2d(self.ks, self.thetas, self.joint_pdf, n_samples).tolist()
+        samples = inverse_transform_sampling_2d(self.ks, self.thetas, self.joint_pdf, n_samples)
 
         # add to list of all samples
-        self.samples += samples
+        self.samples += samples.tolist()
 
-        return np.array(self.samples)
+        return samples
+
+    def rvs(self, n_samples):
+        return self.gen(n_samples)
 
     @property
     def mean(self):
@@ -1145,6 +1147,12 @@ class NBExactPosterior:
         if len(self.samples) == 0:
             self.gen(1000)
         return np.sqrt(np.diag(np.cov(np.array(self.samples).T))).reshape(-1)
+
+    @property
+    def cov(self):
+        if len(self.samples) == 0:
+            self.gen(1000)
+        return np.cov(np.array(self.samples).T)
 
     def get_marginals(self):
 
@@ -1273,3 +1281,35 @@ class Distribution:
             self.gen(1000)
 
         return np.std(self.samples)
+
+
+class JointGammaPrior:
+
+    def __init__(self, prior_k, prior_theta):
+
+        self.prior_k = prior_k
+        self.prior_theta = prior_theta
+
+    def gen(self, n_samples):
+
+        sk = self.prior_k.rvs(n_samples)
+        sth = self.prior_theta.rvs(n_samples)
+
+        return np.vstack((sk, sth)).reshape(n_samples, 2)
+
+    def pdf(self, samples):
+
+        samples = np.atleast_1d(samples)
+        assert samples.shape[1] == 2, 'samples should be (n_samples, 2)'
+
+        pk = self.prior_k.pdf(samples[:, 0])
+        pth = self.prior_theta.pdf(samples[:, 1])
+
+        return pk * pth
+
+    def rvs(self, n_samples):
+        return self.gen(n_samples)
+
+    def eval(self, samples):
+        return self.pdf(samples)
+
