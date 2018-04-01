@@ -119,7 +119,7 @@ class NegativeBinomialModel(BaseModel):
 
         return sample
 
-    def get_exact_posterior(self, x_obs, prior_k, prior_theta):
+    def get_exact_posterior(self, x_obs, prior_k, prior_theta, prec=1e-5):
         """
         Get the exact posterior by numerical integration given the observed data and the priors
         :param x_obs: observed data, array of counts
@@ -129,8 +129,6 @@ class NegativeBinomialModel(BaseModel):
         """
         post = NBExactPosterior(x_obs, prior_k, prior_theta)
         # calculate posterior
-        post.calculat_exact_posterior(verbose=False)
-        # generate a lot of samples to approximate the mean
-        samples = post.gen(10000)
+        post.calculat_exact_posterior(verbose=False, prec=prec)
 
         return post

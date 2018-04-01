@@ -534,34 +534,61 @@ class PytorchMultivariateMoG:
 
         return samples
 
-    def get_covariance(self):
+    def get_Ss_from_Us(self):
+        """
+        Get the matrix of covariance matrices from the matrix of Cholesky transforms of the precision matrices.
+        :return:
+        """
 
+        # prelocate
         Ss = np.zeros_like(self.Us.data.numpy())
 
+        # loop over batch
         for d in range(self.nbatch):
+            # loop over components
             for k in range(self.n_components):
+                # get the U matrix
                 U = self.Us[d, k, ].data.numpy()
+                # inverse the Cholesky transform to that of the covariance matrix
                 C = np.linalg.inv(U.T)
+                # get the covariance matrix from its Cholesky transform
                 Ss[d, k, ] = np.dot(C.T, C)
 
+        # set the matrix as attribute
         self.Ss = Ss
 
         return Ss
 
     def ztrans_inv(self, mean, std):
-        # mus = []
-        # Us = []
-        # # for every component
-        # for k in range(self.n_components):
-        #
-        #     # get the new Gaussian
-        #     m = std * self.mus[:, k, :] + mean
-        #     Ss = np.outer(std, std) * self.get_covariance()
-        #
-        #
-        #
-        # return scipy.stats.multivariate_normal(mean=m, cov=cov)
-        pass
+        """
+        Inverse ztransform.
+
+        Given a mean and std used for ztransform, return the PytorchMultivariateMoG holding the original location and
+        scale. Assumes that the current loc and scale of the indivudual Gaussian is close to 0, 1, i.e., that the
+        covariance matrix is a diagonal matrix.
+        Applies the transform to every component separately and keeps the alpha for the new MoG.
+
+        :param mean: mean of the original distribution
+        :param std: vector of standard deviations of the original distribution
+        :return: PytorchMultivariateMoG object with the original mean and variance. 
+        """
+
+        mus = np.zeros((self.nbatch, self.ndims, self.n_components))
+        Us = np.zeros((self.nbatch, self.n_components, self.ndims, self.ndims))
+
+        Ssz = self.get_Ss_from_Us()
+
+        # for every component
+        for d in range(self.nbatch):
+            for k in range(self.n_components):
+                mus[d, :, k] = std * self.mus[d, :, k].data.numpy() + mean
+                S = np.outer(std, std) * Ssz[d, k,]
+                Sin = np.linalg.inv(S)
+                U = np.linalg.cholesky(Sin).T
+                Us[d, k,] = U
+
+        return PytorchMultivariateMoG(Variable(torch.Tensor(mus.tolist())),
+                                      Variable(torch.Tensor(Us.tolist())), self.alphas)
 
 
 class UnivariateMogMDN(nn.Module):
