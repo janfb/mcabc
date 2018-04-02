@@ -1002,9 +1002,10 @@ class NBExactPosterior:
 
         self.samples = []
 
-    def calculat_exact_posterior(self, n_samples=200, prec=1e-4, verbose=True):
+    def calculat_exact_posterior(self, theta_o, n_samples=200, prec=1e-6, verbose=True):
         """
         Calculate the exact posterior.
+        :param theta_o: the true parameter theta
         :param n_samples: the number of entries per dimension on the joint_pdf grid
         :param prec: precision for the range of prior values
         :return: No return
@@ -1013,9 +1014,18 @@ class NBExactPosterior:
         # if not calculated
         if not self.calculated:
             self.calculated = True
-            # set up a grid
-            self.ks = np.linspace(self.prior_k.ppf(prec), self.prior_k.ppf(1 - prec), n_samples)
-            self.thetas = np.linspace(self.prior_th.ppf(prec), self.prior_th.ppf(1 - prec), n_samples)
+            # set up a grid. take into account the true theta value to cover the region around it in the posterior
+            # get the quantiles of the true theto under the prior
+            k_pos = self.prior_k.cdf(theta_o[0])
+            th_pos = self.prior_th.cdf(theta_o[1])
+
+            # set the tail around it,
+            tail = 0.8
+            # choose ranges such that there are enough left and right of the true theta, use prec for bounds
+            self.ks = np.linspace(self.prior_k.ppf(np.max((prec, k_pos - tail))),
+                                  self.prior_k.ppf(np.min((1 - prec, k_pos + tail))), n_samples)
+            self.thetas = np.linspace(self.prior_th.ppf(np.max((prec, th_pos - tail))),
+                                      self.prior_th.ppf(np.min((1 - prec, th_pos + tail))), n_samples)
 
             joint_pdf = np.zeros((self.ks.size, self.thetas.size))
 
