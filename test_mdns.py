@@ -169,3 +169,17 @@ class TestMDNs(TestCase):
         quantiles = pp.get_quantile_per_variable(np.reshape([lower, upper, m], (3, -1)))
 
         assert np.isclose(quantiles, [[0., 0.], [1., 1.], [.5, .5]]).all(), 'incorrect quantiles: {}'.format(quantiles)
+
+    def test_multivariate_gen(self):
+
+        model = MultivariateMogMDN(ndim_input=2, ndim_output=2, n_components=3)
+
+        pp = model.predict([[1., 1.]])
+
+        # just test the outer edges and the mean
+        ns = 10
+        ss = pp.gen(ns)
+
+        print(ss)
+
+        assert ss.shape == (ns, 2), 'samples shape have shape ({}, 2), have {}'.format(ns, ss.shape)

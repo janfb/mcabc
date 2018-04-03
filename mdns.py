@@ -570,10 +570,12 @@ class PytorchMultivariateMoG:
         """
 
         # get the number of samples per component, according to mixture weights alpha
-        ns = np.random.multinomial(n_samples, pvals=self.alphas.data.numpy().squeeze())
+        ps = np.atleast_1d(self.alphas.data.numpy().squeeze())
+        ns = np.random.multinomial(n_samples, pvals=ps)
 
         # sample for each component
-        samples = []
+        samples = np.zeros((1, 2)) # hack for initialization
+        lower = 0
         for k, n in enumerate(ns):
             # construct scipy object
             mean = self.mus[:, :, k].data.numpy().squeeze()
@@ -583,8 +585,11 @@ class PytorchMultivariateMoG:
             S = np.dot(C.T, C)
 
             # add samples to list
-            samples += scipy.stats.multivariate_normal.rvs(mean=mean, cov=S, size=n).tolist()
+            ss = np.atleast_2d(scipy.stats.multivariate_normal.rvs(mean=mean, cov=S, size=n))
+            samples = np.vstack((samples, ss))
 
+        # remove hack
+        samples = samples[1:, :]
         # shuffle and return
         np.random.shuffle(samples)
 
