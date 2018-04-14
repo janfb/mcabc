@@ -12,11 +12,12 @@ from delfi.utils.viz import plot_pdf
 from lfimodels.channelomics.ChannelSingle import ChannelSingle
 from lfimodels.channelomics.ChannelSuper import ChannelSuper
 from lfimodels.channelomics.ChannelStats import ChannelStats
+from lfimodels.channelomics.ChannelMPGenerator import ChannelMPGenerator
 from matplotlib import pyplot as plt
 
 
 ## GOAL of this script: generate k and na channel data and save to disk for later training
-n_samples = 10
+n_samples = 100
 seed = 1
 cython = True
 
@@ -31,7 +32,7 @@ LP = {'kd': ['power','vt','scale_a','shift_a', 'escale_a', 'scale_b', 'shift_b',
 gt_k = GT['kd']
 prior_lims_k = np.sort(np.concatenate((0.3 * gt_k.reshape(-1,1), 1.3 * gt_k.reshape(-1,1)), axis=1))
 
-n_workers = 2
+n_workers = 4
 
 # as we use k as gt, the model is already set up..
 # mk = ChannelSingle(channel_type='k', n_params=len(gt_k), cython=cython, seed=seed)
@@ -41,7 +42,7 @@ mks = [ChannelSingle(channel_type='kd', n_params=len(gt_k), cython=cython, seed=
 pk = dd.Uniform(lower=prior_lims_k[:, 0], upper=prior_lims_k[:, 1], seed=seed)
 sk = ChannelStats(channel_type='kd', seed=seed)
 # gk = Default(model=mk, summary=sk, prior=pk, seed=seed)
-gk = MPGenerator(models=mks, summary=sk, prior=pk, seed=seed)
+gk = ChannelMPGenerator(models=mks, summary=sk, prior=pk, seed=seed)
 
 # set up na model
 gt_ks = GT['kslow']
@@ -53,7 +54,7 @@ mnas = [ChannelSingle(channel_type='kslow', n_params=len(gt_ks), cython=cython, 
 pna = dd.Uniform(lower=prior_lims_ks[:, 0], upper=prior_lims_ks[:, 1], seed=seed)
 sna = ChannelStats(channel_type='kslow', seed=seed)
 # gna = Default(model=mna, summary=sna, prior=pna, seed=seed)
-gks = MPGenerator(models=mnas, summary=sna, prior=pna, seed=seed)
+gks = ChannelMPGenerator(models=mnas, summary=sna, prior=pna, seed=seed)
 
 
 # generate data
