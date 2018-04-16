@@ -67,7 +67,8 @@ result_dict = dict(params_kd=params_kd, sx_kd=sx_kd, gt_kd=gt_k, prior_lims_kd=p
 
 # save data
 folder = '../data'
-filename = 'training_data_kd_ks_N{}seed{}'.format(n_samples, seed)
+time_stamp = time.strftime('%Y%m%d%H%M_')
+filename = time_stamp + '_training_data_kd_ks_N{}seed{}'.format(n_samples, seed)
 full_path_to_file = os.path.join(folder, filename + '.p')
 with open(full_path_to_file, 'wb') as outfile:
     pickle.dump(result_dict, outfile, protocol=pickle.HIGHEST_PROTOCOL)
