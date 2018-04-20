@@ -26,8 +26,9 @@ start = time.time()
 GT = {'kd': np.array([[4, -63, 0.032, 15, 5, 0.5, 10, 40]]),
       'kslow': np.array([[1, 35, 10, 3.3, 20]])}
 
-LP = {'kd': ['power','vt','scale_a','shift_a', 'escale_a', 'scale_b', 'shift_b', 'escale_b'],
-      'kslow': ['power', 'vt', 'scale_p', 'scale_tau', 'escale_tau']}
+LP = {'kd': ['power',r'$V_T$',r'$R_{\alpha}$',r'$th_{\alpha}$', r'$q_{\alpha}$', r'$R_{\beta}$', r'$th_{\beta}$',
+             r'$q_{\beta}$'],
+      'kslow': ['power', r'$V_T$', r'$q_p$', r'$R_{\tau}$', r'$q_{\tau}$']}
 
 gt_k = GT['kd']
 prior_lims_k = np.sort(np.concatenate((0.3 * gt_k.reshape(-1,1), 1.3 * gt_k.reshape(-1,1)), axis=1))
