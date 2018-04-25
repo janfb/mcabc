@@ -1324,3 +1324,96 @@ class JointGammaPrior:
     def eval(self, samples):
         return self.pdf(samples)
 
+
+def rejection_sampling_abc(sxo, models, model_priors, param_priors, niter=10000, verbose=False, eps=1e-1):
+    """
+    Basic rejection sampling algorithm including estimate of the model posterior.
+
+    Takes mean and var of data vector as summary stats.
+
+    :param sxo: observed summary stats
+    :param models: list with scipy.stats objects
+    :param model_priors: list of model prior probs, summing to 1
+    :param param_priors: list of lists containing the scipy.stats prior objects for every model
+    :param niter: number of iterations
+    :param verbose: no pbar if False
+    :param eps: rejection criterion.
+    :return: list of accepted model indices, list of lists of accepted parameters, list of differences for every it.
+    """
+    n_models = len(models)
+
+    accepted_its = []
+    accepted_mi = []
+    accepted_params = [[] for n in range(n_models)]
+    differences = []
+
+    for it in tqdm.tqdm(range(niter), disable=not verbose):
+        # sample model index
+        mi = np.where(np.random.multinomial(n=1, pvals=model_priors))[0][0]
+
+        # get model and prior
+        m = models[mi]
+        priors = param_priors[mi]
+        # sample corresponding params
+        params = [prior.rvs() for prior in priors]
+        # get data and stats
+        x = m.gen([params])
+        sx = np.array([x.mean(), x.var()])
+        # take diff
+        d = np.abs(sxo - sx).sum()
+        differences.append(d)
+        if d < eps:
+            accepted_its.append(it)
+            accepted_params[mi].append(params)
+            accepted_mi.append(mi)
+
+    return accepted_mi, accepted_params, differences
+
+
+def rejection_abc_from_stats(sxo, model_stats, model_priors, niter=10000, verbose=False, eps=1e1):
+    """
+    Rejection abc to estimate model posterior probability.
+
+    Works with a precomputed set of summary statistics. Samples from this data set to approx. sampling form the
+    distribution and running the forward simulations. The provided set of summary statistics should therefore be
+    reasonably large.
+
+    :param sxo: observed summary stats
+    :param model_stats: list of sets of summary stats for every model
+    :param model_priors: list of model prior probs, sums to 1
+    :param niter: number of iterations
+    :param verbose: shows pbar if True
+    :param eps: rejection criterion, select carefully!
+    :return:
+        list: accepted model indices over iterations,
+        list: lists with indices of accepted data sets, for parameter posterior estimation
+        list: difference to observed stats for every iteration,
+    """
+
+    n_models = len(model_stats)
+
+    accepted_its = []
+    accepted_mi = []
+    differences = []
+    data_set_indices = [[] for n in range(n_models)]
+
+    for it in tqdm.tqdm(range(niter), disable=not verbose):
+        # sample model index
+        mi = np.where(np.random.multinomial(n=1, pvals=model_priors))[0][0]
+
+        # get data and stats
+        data_set = model_stats[mi]
+        idx = np.random.randint(0, data_set.shape[0])
+        sx = data_set[idx,]
+        # take diff
+        d = np.abs(sxo - sx).sum()
+        differences.append(d)
+        if d < eps:
+            # save idx of data used in this iteration
+            data_set_indices[mi].append(idx)
+            # save iteration
+            accepted_its.append(it)
+            # save model idx
+            accepted_mi.append(mi)
+
+    return accepted_mi, data_set_indices, differences
