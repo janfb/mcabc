@@ -10,7 +10,7 @@ from lfimodels.channelomics.ChannelMPGenerator import ChannelMPGenerator
 
 
 # GOAL of this script: generate k and na channel data and save to disk for later training
-n_samples = 100
+n_samples = 10
 seed = 1
 cython = True
 
@@ -24,7 +24,7 @@ LP = {'kd': ['power',r'$V_T$',r'$R_{\alpha}$',r'$th_{\alpha}$', r'$q_{\alpha}$',
       'kslow': ['power', r'$V_T$', r'$q_p$', r'$R_{\tau}$', r'$q_{\tau}$']}
 
 gt_k = GT['kd']
-prior_lims_k = np.sort(np.concatenate((0.3 * gt_k.reshape(-1,1), 1.3 * gt_k.reshape(-1,1)), axis=1))
+prior_lims_k = np.sort(np.concatenate((0.9 * gt_k.reshape(-1, 1), 1.2 * gt_k.reshape(-1, 1)), axis=1))
 
 n_workers = 4
 
@@ -38,7 +38,7 @@ gk = ChannelMPGenerator(models=mks, summary=sk, prior=pk, seed=seed)
 
 # set up kslow model
 gt_ks = GT['kslow']
-prior_lims_ks = np.sort(np.concatenate((0.3 * gt_ks.reshape(-1, 1), 1.3 * gt_ks.reshape(-1, 1)), axis=1))
+prior_lims_ks = np.sort(np.concatenate((0.9 * gt_ks.reshape(-1, 1), 1.2 * gt_ks.reshape(-1, 1)), axis=1))
 
 model_seeds = np.arange(n_workers, 2 * n_workers)
 mnas = [ChannelSingle(channel_type='kslow', n_params=len(gt_ks), cython=cython, seed=model_seeds[i]) for i in range(n_workers)]
