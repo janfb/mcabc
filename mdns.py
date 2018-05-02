@@ -597,7 +597,7 @@ class PytorchMultivariateMoG:
 
     def get_Ss_from_Us(self):
         """
-        Get the matrix of covariance matrices from the matrix of Cholesky transforms of the precision matrices.
+        Get the covariance from the matrix of Cholesky transforms of the precision matrices.
         :return:
         """
 
@@ -643,7 +643,7 @@ class PytorchMultivariateMoG:
         for d in range(self.nbatch):
             for k in range(self.n_components):
                 mus[d, :, k] = std * self.mus[d, :, k].data.numpy() + mean
-                S = np.outer(std, std) * Ssz[d, k,]
+                S = np.outer(std, std) * Ssz[d, k, ]
                 Sin = np.linalg.inv(S)
                 U = np.linalg.cholesky(Sin).T
                 Us[d, k,] = U

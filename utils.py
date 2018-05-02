@@ -1268,7 +1268,7 @@ class Distribution:
         else:
             # how much mass is below, times 2 (2 tails)
             ci = 1 - 2 * q
-        counts = np.ones_like(credible_intervals) * (credible_intervals>= ci)
+        counts = np.ones_like(credible_intervals) * (credible_intervals >= ci)
         return counts
 
     @property
