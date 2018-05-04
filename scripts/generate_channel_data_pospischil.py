@@ -10,7 +10,7 @@ from lfimodels.channelomics.ChannelMPGenerator import ChannelMPGenerator
 
 
 # GOAL of this script: generate k and na channel data and save to disk for later training
-n_samples = 10
+n_samples = int(5 * 1e5)
 seed = 1
 cython = True
 
@@ -24,9 +24,9 @@ LP = {'kd': ['power',r'$V_T$',r'$R_{\alpha}$',r'$th_{\alpha}$', r'$q_{\alpha}$',
       'kslow': ['power', r'$V_T$', r'$q_p$', r'$R_{\tau}$', r'$q_{\tau}$']}
 
 gt_k = GT['kd']
-prior_lims_k = np.sort(np.concatenate((0.9 * gt_k.reshape(-1, 1), 1.2 * gt_k.reshape(-1, 1)), axis=1))
+prior_lims_k = np.sort(np.concatenate((0.7 * gt_k.reshape(-1, 1), 1.2 * gt_k.reshape(-1, 1)), axis=1))
 
-n_workers = 4
+n_workers = 30
 
 # as we use k as gt, the model is already set up..
 model_seeds = np.arange(1, n_workers + 1)
@@ -38,7 +38,7 @@ gk = ChannelMPGenerator(models=mks, summary=sk, prior=pk, seed=seed)
 
 # set up kslow model
 gt_ks = GT['kslow']
-prior_lims_ks = np.sort(np.concatenate((0.9 * gt_ks.reshape(-1, 1), 1.2 * gt_ks.reshape(-1, 1)), axis=1))
+prior_lims_ks = np.sort(np.concatenate((0.7 * gt_ks.reshape(-1, 1), 1.2 * gt_ks.reshape(-1, 1)), axis=1))
 
 model_seeds = np.arange(n_workers, 2 * n_workers)
 mnas = [ChannelSingle(channel_type='kslow', n_params=len(gt_ks), cython=cython, seed=model_seeds[i]) for i in range(n_workers)]
@@ -59,7 +59,7 @@ result_dict = dict(params_kd=params_kd, sx_kd=sx_kd, gt_kd=gt_k, prior_lims_kd=p
 # save data
 folder = '../data'
 time_stamp = time.strftime('%Y%m%d%H%M_')
-filename = time_stamp + '_training_data_kd_ks_N{}seed{}'.format(n_samples, seed)
+filename = time_stamp + '_training_data_kd_ks_N{}seed{}_prior0912'.format(n_samples, seed)
 full_path_to_file = os.path.join(folder, filename + '.p')
 with open(full_path_to_file, 'wb') as outfile:
     pickle.dump(result_dict, outfile, protocol=pickle.HIGHEST_PROTOCOL)
