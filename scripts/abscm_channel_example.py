@@ -29,8 +29,8 @@ LP = {'kd': ['power',r'$V_T$',r'$R_{\alpha}$',r'$th_{\alpha}$', r'$q_{\alpha}$',
 E_channel = {'kd': -90.0, 'kslow': -90.0}
 fact_inward = {'kd': 1, 'kslow': 1}
 
-prior_lims_kd = np.sort(np.concatenate((0.3 * GT['kd'].reshape(-1, 1), 1.3 * GT['kd'].reshape(-1, 1)), axis=1))
-prior_lims_ks = np.sort(np.concatenate((0.3 * GT['kslow'].reshape(-1, 1), 1.3 * GT['kslow'].reshape(-1, 1)), axis=1))
+prior_lims_kd = np.sort(np.concatenate((0.9 * GT['kd'].reshape(-1, 1), 1.2 * GT['kd'].reshape(-1, 1)), axis=1))
+prior_lims_ks = np.sort(np.concatenate((0.9 * GT['kslow'].reshape(-1, 1), 1.2 * GT['kslow'].reshape(-1, 1)), axis=1))
 
 cython = True
 seed = 2
@@ -103,7 +103,7 @@ with open(os.path.join('../data', fn), 'rb') as f:
     dpost = pickle.load(f)['model_idx_posterior']
 dpost.keys()
 
-upto = 1
+upto = 50
 test_set = np.vstack((sx_test_kd[:upto, ], sx_test_ks[:upto, ]))
 mtest = np.hstack((np.zeros(upto), np.ones(upto))).astype(int).tolist()
 ntest = test_set.shape[0]
@@ -114,15 +114,12 @@ phat_mdn = np.zeros((ntest, 2))
 model_mdn = dpost['model_idx_mdn']
 data_norm = dpost['data_norm']
 
-n_rounds = 3
+n_rounds = 5
 n_simulations = 0
 
+tic = time.time()
 for ii in tqdm.tqdm(range(ntest)):
-    sxo = test_set[ii,]
-
-    # predict with mdn
-    sxo_zt, _ = normalize(sxo, data_norm)
-    phat_mdn[ii,] = model_mdn.predict(sxo_zt.reshape(1, -1))
+    sxo = test_set[ii, ]
 
     # We plug all the ABC options together
     abc = ABCSMC(
@@ -134,14 +131,32 @@ for ii in tqdm.tqdm(range(ntest)):
     abc_id = abc.new(db_path, {"y": sxo})
 
     history = abc.run(minimum_epsilon=1e-7, max_nr_populations=n_rounds)
-    model_probabilities = history.get_model_probabilities()
+    model_probabilities = history.get_model_probabilities().as_matrix()
     print(model_probabilities)
     print(history.total_nr_simulations)
+    n_simulations += history.total_nr_simulations
 
-    phat_smc[ii, 0] = model_probabilities[0][model_probabilities.shape[0] - 1]
+    try:
+        phat_smc[ii, 0] = model_probabilities[model_probabilities.shape[0] - 1, 0]
+    except IndexError:
+        phat_smc[ii, 0] = model_probabilities[model_probabilities.shape[0] - 1]
     phat_smc[ii, 1] = 1 - phat_smc[ii, 0]
 
-d = dict(mtest=mtest, sx_test=test_set, ppoi_hat=phat_mdn[:, 0], ppoi_smc=phat_smc[:, 0], data_norm=data_norm)
+time_smc = time.time() - tic
+
+tic = time.time()
+for ii in tqdm.tqdm(range(ntest)):
+    sxo = test_set[ii,]
+
+    # predict with mdn
+    sxo_zt, _ = normalize(sxo, data_norm)
+    phat_mdn[ii,] = model_mdn.predict(sxo_zt.reshape(1, -1))
+
+time_de = time.time()
+
+
+d = dict(mtest=mtest, sx_test=test_set, ppoi_hat=phat_mdn[:, 0], ppoi_smc=phat_smc[:, 0], data_norm=data_norm,
+         time_de=time_de, time_smc=time_smc, n_simulations=n_simulations)
 
 time_stamp = time.strftime('%Y%m%d%H%M_')
 

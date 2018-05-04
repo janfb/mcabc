@@ -1406,7 +1406,7 @@ def rejection_abc_from_stats(sxo, model_stats, model_priors, niter=10000, verbos
         idx = np.random.randint(0, data_set.shape[0])
         sx = data_set[idx,]
         # take diff
-        d = np.abs(sxo - sx).sum()
+        d = np.power(sxo - sx, 2).mean()
         differences.append(d)
         if d < eps:
             # save idx of data used in this iteration
