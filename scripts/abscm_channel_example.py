@@ -29,8 +29,8 @@ LP = {'kd': ['power',r'$V_T$',r'$R_{\alpha}$',r'$th_{\alpha}$', r'$q_{\alpha}$',
 E_channel = {'kd': -90.0, 'kslow': -90.0}
 fact_inward = {'kd': 1, 'kslow': 1}
 
-prior_lims_kd = np.sort(np.concatenate((0.9 * GT['kd'].reshape(-1, 1), 1.2 * GT['kd'].reshape(-1, 1)), axis=1))
-prior_lims_ks = np.sort(np.concatenate((0.9 * GT['kslow'].reshape(-1, 1), 1.2 * GT['kslow'].reshape(-1, 1)), axis=1))
+prior_lims_kd = np.sort(np.concatenate((0.3 * GT['kd'].reshape(-1, 1), 1.3 * GT['kd'].reshape(-1, 1)), axis=1))
+prior_lims_ks = np.sort(np.concatenate((0.3 * GT['kslow'].reshape(-1, 1), 1.3 * GT['kslow'].reshape(-1, 1)), axis=1))
 
 cython = True
 seed = 2
@@ -89,6 +89,7 @@ class MyDist(DistanceFunction):
 
     def __call__(self, x, y):
         return np.power(x['y'] - y['y'], 2).mean()
+
 
 fn = 'training_data_kd_ks_N100seed1.p'
 with open(os.path.join('../data', fn), 'rb') as f:

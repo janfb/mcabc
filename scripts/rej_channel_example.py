@@ -37,9 +37,9 @@ with open(os.path.join('../data', fn), 'rb') as f:
     dpost = pickle.load(f)['model_idx_posterior']
 dpost.keys()
 
-upto = 5
+upto = 50
 test_set = np.vstack((sx_test_kd[:upto, ], sx_test_ks[:upto, ]))
-mtest = np.hstack((np.zeros(upto), np.ones(upto))).astype(int).tolist()
+mtest = np.hstack((np.zeros(sx_test_kd[:upto, ].shape[0]), np.ones(sx_test_ks.shape[0]))).astype(int).tolist()
 ntest = test_set.shape[0]
 phat_rej = np.zeros((ntest, 2))
 phat_mdn = np.zeros((ntest, 2))
@@ -56,7 +56,6 @@ for ii in tqdm.tqdm(range(ntest)):
                                                                           niter=100000, verbose=False, eps=1e-6)
 
     phat_rej[ii, 1] = np.mean(accepted_mi)
-    print(len(accepted_mi), phat_rej[ii, 1])
     phat_rej[ii, 0] = 1 - phat_rej[ii, 1]
 
 time_smc = time.time() - tic
