@@ -37,26 +37,32 @@ with open(os.path.join('../data', fn), 'rb') as f:
     dpost = pickle.load(f)['model_idx_posterior']
 dpost.keys()
 
-upto = 50
+upto = 500
 test_set = np.vstack((sx_test_kd[:upto, ], sx_test_ks[:upto, ]))
-mtest = np.hstack((np.zeros(sx_test_kd[:upto, ].shape[0]), np.ones(sx_test_ks.shape[0]))).astype(int).tolist()
+mtest = np.hstack((np.zeros(sx_test_kd[:upto, ].shape[0]),
+                    np.ones(sx_test_ks[:upto, ].shape[0]))).astype(int).tolist()
 ntest = test_set.shape[0]
-phat_rej = np.zeros((ntest, 2))
-phat_mdn = np.zeros((ntest, 2))
-
 # get mdn
 model_mdn = dpost['model_idx_mdn']
 data_norm = dpost['data_norm']
 
 tic = time.time()
-for ii in tqdm.tqdm(range(ntest)):
-    sxo = test_set[ii, ]
 
-    accepted_mi, data_set_indices, differences = rejection_abc_from_stats(sxo, [sx_kd, sx_ks], [0.5, 0.5],
-                                                                          niter=100000, verbose=False, eps=1e-6)
+priors = np.arange(0.5, 0.6, 0.1)
+n_priors = priors.shape[0]
 
-    phat_rej[ii, 1] = np.mean(accepted_mi)
-    phat_rej[ii, 0] = 1 - phat_rej[ii, 1]
+phat_rej = np.zeros((n_priors, ntest, 2))
+phat_mdn = np.zeros((n_priors, ntest, 2))
+
+for iprior, pkd in enumerate(priors):
+    for ii in tqdm.tqdm(range(ntest)):
+        sxo = test_set[ii, ]
+
+        accepted_mi, data_set_indices, differences = rejection_abc_from_stats(sxo, [sx_kd, sx_ks], [pkd, 1 - pkd],
+                                                                              niter=100000, verbose=False, eps=5e-6)
+
+        phat_rej[iprior, ii, 1] = np.mean(accepted_mi)
+        phat_rej[iprior, ii, 0] = 1 - phat_rej[ii, 1]
 
 time_smc = time.time() - tic
 
@@ -76,6 +82,6 @@ d = dict(mtest=mtest, sx_test=test_set, ppoi_hat=phat_mdn[:, 0], ppoi_smc=phat_r
 
 time_stamp = time.strftime('%Y%m%d%H%M_')
 
-fn = time_stamp + '_modelposterior_comparison_rejection_sampling_channels_ntest{}.p'.format(ntest)
+fn = time_stamp + '_modelposterior_comparison_rejection_sampling_channels_ntest{}_with_priorcheck.p'.format(ntest)
 with open(os.path.join('../data', fn), 'wb') as outfile:
     pickle.dump(d, outfile, protocol=pickle.HIGHEST_PROTOCOL)

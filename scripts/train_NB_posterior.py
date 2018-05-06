@@ -12,8 +12,8 @@ seed = 5
 np.random.seed(seed)
 
 # priors
-sample_size = 100
-ntrain = int(100000)
+sample_size = 10
+ntrain = int(500000)
 k2, k3 = 20., 2.
 theta2, theta3 = 1., 2.
 
@@ -50,7 +50,7 @@ result_dict = dict(prior_k=prior_k,
                    param_norm=param_norm,
                    mdn=model_params_mdn,
                    trainer=trainer)
-full_path = '../data/learned_posterior_nbmodel_ntrain{}.p'.format(ntrain)
+full_path = '../data/learned_posterior_nbmodel_ntrain{}_ns{}.p'.format(ntrain, sample_size)
 
 # save result
 with open(full_path, 'wb') as outfile:

@@ -6,7 +6,7 @@ sys.path.append('../../')
 from model_comparison.mdns import *
 
 folder = '../data/'
-fn = 'learned_posterior_nbmodel_ntrain100000.p'
+fn = 'learned_posterior_nbmodel_ntrain500000_ns10.p'
 time_stamp = time.strftime('%Y%m%d%H%M_')
 
 with open(os.path.join(folder, fn), 'rb') as f:
