@@ -1417,3 +1417,15 @@ def rejection_abc_from_stats(sxo, model_stats, model_priors, niter=10000, verbos
             accepted_mi.append(mi)
 
     return accepted_mi, data_set_indices, differences
+
+
+def cross_entropy_loss(y, p):
+    """
+    Calculate the mean cross entropy loss of a vector of probabilities against the target.
+    :param y: targets \in {0, 1}
+    :param p: predictions with probabilities p(y=1)
+    :return: cross entropy loss averaged over vector
+    """
+    loss = -y * np.log(p) - (1 - y) * np.log(1 - p)
+    mask = np.isfinite(loss)
+    return loss[mask]
