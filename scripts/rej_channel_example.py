@@ -37,7 +37,7 @@ with open(os.path.join('../data', fn), 'rb') as f:
     dpost = pickle.load(f)['model_idx_posterior']
 dpost.keys()
 
-upto = 500
+upto = 2
 test_set = np.vstack((sx_test_kd[:upto, ], sx_test_ks[:upto, ]))
 mtest = np.hstack((np.zeros(sx_test_kd[:upto, ].shape[0]),
                     np.ones(sx_test_ks[:upto, ].shape[0]))).astype(int).tolist()
@@ -48,11 +48,11 @@ data_norm = dpost['data_norm']
 
 tic = time.time()
 
-priors = np.arange(0.5, 0.6, 0.1)
+priors = np.arange(0.1, 1., 0.1)
 n_priors = priors.shape[0]
 
 phat_rej = np.zeros((n_priors, ntest, 2))
-phat_mdn = np.zeros((n_priors, ntest, 2))
+phat_mdn = np.zeros((ntest, 2))
 
 for iprior, pkd in enumerate(priors):
     for ii in tqdm.tqdm(range(ntest)):
@@ -62,7 +62,7 @@ for iprior, pkd in enumerate(priors):
                                                                               niter=100000, verbose=False, eps=5e-6)
 
         phat_rej[iprior, ii, 1] = np.mean(accepted_mi)
-        phat_rej[iprior, ii, 0] = 1 - phat_rej[ii, 1]
+        phat_rej[iprior, ii, 0] = 1 - phat_rej[iprior, ii, 1]
 
 time_smc = time.time() - tic
 
@@ -72,12 +72,12 @@ for ii in tqdm.tqdm(range(ntest)):
 
     # predict with mdn
     sxo_zt, _ = normalize(sxo, data_norm)
-    phat_mdn[ii,] = model_mdn.predict(sxo_zt.reshape(1, -1))
+    phat_mdn[ii, ] = model_mdn.predict(sxo_zt.reshape(1, -1))
 
 time_de = time.time()
 
 
-d = dict(mtest=mtest, sx_test=test_set, ppoi_hat=phat_mdn[:, 0], ppoi_smc=phat_rej[:, 0], data_norm=data_norm,
+d = dict(mtest=mtest, sx_test=test_set, ppoi_hat=phat_mdn[:, 0], ppoi_rej=phat_rej[:, :, 0], data_norm=data_norm,
          time_de=time_de, time_smc=time_smc)
 
 time_stamp = time.strftime('%Y%m%d%H%M_')
