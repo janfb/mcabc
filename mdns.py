@@ -95,7 +95,7 @@ class PytorchUnivariateMoG:
             mu = self.mus[:, k].unsqueeze(1)
             sigma = self.sigmas[:, k].unsqueeze(1)
             lprobs = self.normal_pdf(y.unsqueeze(1), mu, sigma, log=True)
-            log_probs_mat[:, k] = lprobs
+            log_probs_mat[:, k] = lprobs.squeeze()
 
         log_probs_batch = my_log_sum_exp(torch.log(self.alphas) + log_probs_mat, axis=1)
 
@@ -403,7 +403,8 @@ class PytorchMultivariateMoG:
 
         # take weighted sum over components to get log probs
         for k in range(K):
-            log_probs_mat[:, k] = multivariate_normal_pdf(X=y, mus=self.mus[:, :, k], Us=self.Us[:, k, :, :], log=True)
+            log_probs_mat[:, k] = multivariate_normal_pdf(X=y, mus=self.mus[:, :, k], Us=self.Us[:, k, :, :],
+                                                          log=True).squeeze()
 
         # now apply the log sum exp trick: sum_k alpha_k * N(Y|mu, sigma) = sum_k exp(log(alpha_k) + log(N(Y| mu, sigma)))
         # this give the log MoG density over the batch
@@ -729,9 +730,6 @@ class MultivariateMogMDN(nn.Module):
         self.output_mu = nn.Linear(n_hidden_units, ndim_output * n_components)
 
         # output layer to precision estimates
-        # the upper triangular matrix for D-dim Gaussian has m = (D**2 + D) / 2 entries
-        # this should be a m-vector for every component. currently it is just a scalar for every component.
-        # or it could be a long vector of length m * k, i.e, all the k vector stacked.
         self.output_layer_U = nn.Linear(n_hidden_units, self.utriu_entries * n_components)
 
         # additionally we have the mixture weights alpha
@@ -761,7 +759,9 @@ class MultivariateMogMDN(nn.Module):
 
         # assign vector to upper triangle of U
         (idx1, idx2) = np.triu_indices(self.ndims)  # get indices of upper triangle, including diagonal
-        U_mat[:, :, idx1, idx2] = U_vec  # assign vector elements to upper triangle
+
+        U_mat[:, :, idx1, idx2] = U_vec.view(U_mat[:, :, idx1, idx2].size())
+
         # apply exponential to get positive diagonal
         (idx1, idx2) = np.diag_indices(self.ndims)  # get indices of diagonal elements
         U_mat[:, :, idx1, idx2] = torch.exp(U_mat[:, :, idx1, idx2])  # apply exponential to diagonal
