@@ -24,7 +24,7 @@ with open(fn, 'rb') as f:
 sx_ks = d['sx_ks']
 sx_kd = d['sx_kd']
 
-fn = 'training_data_kd_ks_N100seed1.p'
+fn = '201804190902__training_data_kd_ks_N1000seed1.p'
 with open(os.path.join('../data', fn), 'rb') as f:
     dtest = pickle.load(f)
 dtest.keys()
@@ -37,7 +37,7 @@ with open(os.path.join('../data', fn), 'rb') as f:
     dpost = pickle.load(f)['model_idx_posterior']
 dpost.keys()
 
-upto = 2
+upto = 500
 test_set = np.vstack((sx_test_kd[:upto, ], sx_test_ks[:upto, ]))
 mtest = np.hstack((np.zeros(sx_test_kd[:upto, ].shape[0]),
                     np.ones(sx_test_ks[:upto, ].shape[0]))).astype(int).tolist()
