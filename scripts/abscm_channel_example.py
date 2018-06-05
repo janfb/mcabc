@@ -1,23 +1,17 @@
 import numpy as np
 import os
 import pickle
-import sys
 import tempfile
 import time
 import tqdm
 
-from delfi.utils.viz import plot_pdf
-
 from lfimodels.channelomics.ChannelSingle import ChannelSingle
 from lfimodels.channelomics.ChannelStats import ChannelStats
 
-from pyabc import (ABCSMC, RV,
-                   PercentileDistanceFunction, DistanceFunction, sampler)
+from pyabc import (ABCSMC, DistanceFunction)
 from pyabc import Distribution as abcDis
 
-sys.path.append('../../')
-from model_comparison.utils import *
-from model_comparison.mdns import *
+from model_comparison.utils.processing import normalize
 
 GT = {'kd': np.array([[4, -63, 0.032, 15, 5, 0.5, 10, 40]]),
       'kslow': np.array([[1, 35, 10, 3.3, 20]])}
@@ -123,8 +117,7 @@ for ii in tqdm.tqdm(range(ntest)):
     sxo = test_set[ii, ]
 
     # We plug all the ABC options together
-    abc = ABCSMC(
-        models, parameter_priors, MyDist())
+    abc = ABCSMC(models, parameter_priors, MyDist())
 
     # and we define where to store the results
     db_path = ("sqlite:///" +

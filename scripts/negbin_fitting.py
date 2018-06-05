@@ -8,7 +8,7 @@ from torch.autograd import Variable
 from random import shuffle
 from scipy.stats import gamma, beta
 
-from model_comparison.utils import *
+from model_comparison.helpers import *
 
 
 def generate_dataset(N, m, alpha, beta, normalize=False):

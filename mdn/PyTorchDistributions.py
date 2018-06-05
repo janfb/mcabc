@@ -1,69 +1,9 @@
+import delfi.distribution
 import numpy as np
-import scipy.stats
+import scipy
 import torch
-import torch.nn as nn
-import tqdm
 
-import delfi.distribution as dd
 from torch.autograd import Variable
-from model_comparison.utils import *
-
-
-class Trainer:
-
-    def __init__(self, model, optimizer=None, classification=False, verbose=False):
-
-        self.model = model
-        self.optimizer = torch.optim.Adam(model.parameters(), lr=0.01) if optimizer is None else optimizer
-
-        self.loss_trace = None
-
-        self.verbose = verbose
-        self.trained = False
-
-        if classification:
-            self.target_type = torch.LongTensor
-        else:
-            self.target_type = torch.Tensor
-
-    def train(self, X, Y, n_epochs=500, n_minibatch=50):
-        dataset_train = [(x, y) for x, y in zip(X, Y)]
-
-        loss_trace = []
-
-        with tqdm.tqdm(total=n_epochs, disable=not self.verbose,
-                       desc='training') as pbar:
-            for epoch in range(n_epochs):
-                bgen = batch_generator(dataset_train, n_minibatch)
-
-                for j, (x_batch, y_batch) in enumerate(bgen):
-                    x_var = Variable(torch.Tensor(x_batch))
-                    y_var = Variable(self.target_type(y_batch))
-
-                    model_params = self.model(x_var)
-                    loss = self.model.loss(model_params, y_var)
-
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    self.optimizer.step()
-
-                    loss_trace.append(loss.data.numpy())
-                pbar.update()
-
-        self.loss_trace = loss_trace
-
-        self.trained = True
-
-        return loss_trace
-
-    def predict(self, data, samples):
-
-        raise NotImplementedError
-
-        # assert self.trained, 'You need to train the network before predicting'
-        # assert(isinstance(samples, Variable)), 'samples must be in torch Variable'
-        # assert samples.size()[1] == self.model.ndims, 'samples must be 2D matrix with (batch_size, ndims)'
-        # model_params = self.model(samples)
 
 
 class PytorchUnivariateMoG:
@@ -258,7 +198,7 @@ class PytorchUnivariateMoG:
         Ss = [[[s ** 2]] for s in self.sigmas.data.numpy().squeeze().tolist()]
 
         # set up dd MoG object
-        return dd.mixture.MoG(a=a, ms=ms, Ss=Ss)
+        return delfi.distribution.mixture.MoG(a=a, ms=ms, Ss=Ss)
 
     def ztrans_inv(self, mean, std):
         """
@@ -452,7 +392,7 @@ class PytorchMultivariateMoG:
             Us.append(self.Us[:, k, :, :].data.numpy().squeeze())
 
         # delfi MoG takes lists over components as arguments
-        return dd.mixture.MoG(a=a, ms=ms, Us=Us)
+        return delfi.distribution.mixture.MoG(a=a, ms=ms, Us=Us)
 
     def get_quantile(self, x):
         """
@@ -653,230 +593,51 @@ class PytorchMultivariateMoG:
                                       Variable(torch.Tensor(Us.tolist())), self.alphas)
 
 
-class UnivariateMogMDN(nn.Module):
-
-    def __init__(self, ndim_input=2, n_hidden=5, n_components=3):
-        super(UnivariateMogMDN, self).__init__()
-        self.fc_in = nn.Linear(ndim_input, n_hidden)
-        self.tanh = nn.Tanh()
-        self.alpha_out = torch.nn.Sequential(
-              nn.Linear(n_hidden, n_components),
-              nn.Softmax(dim=1)
-            )
-        self.logsigma_out = nn.Linear(n_hidden, n_components)
-        self.mu_out = nn.Linear(n_hidden, n_components)
-
-    def forward(self, x):
-        # make sure the first dimension is at least singleton
-        assert x.dim() >= 2
-        out = self.fc_in(x)
-        act = self.tanh(out)
-        out_alpha = self.alpha_out(act)
-        out_sigma = torch.exp(self.logsigma_out(act))
-        out_mu = self.mu_out(act)
-        return out_mu, out_sigma, out_alpha
-
-    def loss(self, model_params, y):
-        out_mu, out_sigma, out_alpha = model_params
-
-        batch_mog = PytorchUnivariateMoG(mus=out_mu, sigmas=out_sigma, alphas=out_alpha)
-        result = batch_mog.pdf(y, log=True)
-
-        result = torch.mean(result)  # mean over batch
-
-        return -result
-
-    def predict(self, sx):
-        """
-        Take input sx and predict the corresponding posterior over parameters
-        :param sx: shape (n_samples, n_features), e.g., for single sx (1, n_stats)
-        :return: pytorch univariate MoG
-        """
-        if not isinstance(sx, Variable):
-            sx = Variable(torch.Tensor(sx))
-
-        assert sx.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
-
-        out_mu, out_sigma, out_alpha = self.forward(sx)
-
-        return PytorchUnivariateMoG(out_mu, out_sigma, out_alpha)
-
-
-class MultivariateMogMDN(nn.Module):
-
-    def __init__(self, ndim_input=3, ndim_output=2, n_hidden_units=10, n_hidden_layers=1, n_components=3):
-        super(MultivariateMogMDN, self).__init__()
-
-        # dimensionality of the Gaussian components
-        self.ndims = ndim_output
-        self.n_components = n_components
-        # the number of entries in the upper triangular Choleski transform matrix of the precision matrix
-        self.utriu_entries = int(self.ndims * (self.ndims - 1) / 2) + self.ndims
-
-        # activation
-        self.activation_fun = nn.Tanh()
-        self.softmax = nn.Softmax(dim=1)
-
-        # input layer
-        self.input_layer = nn.Linear(ndim_input, n_hidden_units)
-
-        # add a list of hidden layers
-        self.hidden_layers = nn.ModuleList()
-        for _ in range(n_hidden_layers):
-            self.hidden_layers.append(nn.Linear(n_hidden_units, n_hidden_units))
-
-        # output layer maps to different output vectors
-        # the mean estimates
-        self.output_mu = nn.Linear(n_hidden_units, ndim_output * n_components)
-
-        # output layer to precision estimates
-        self.output_layer_U = nn.Linear(n_hidden_units, self.utriu_entries * n_components)
-
-        # additionally we have the mixture weights alpha
-        self.output_layer_alpha = nn.Linear(n_hidden_units, n_components)
-
-    def forward(self, x):
-        batch_size = x.size()[0]
-
-        # input layer
-        x = self.activation_fun(self.input_layer(x))
-
-        # hidden layers
-        for layer in self.hidden_layers:
-            x = self.activation_fun(layer(x))
-
-        # get mu output
-        out_mu = self.output_mu(x)
-        out_mu = out_mu.view(batch_size, self.ndims, self.n_components)
-
-        # get alpha output
-        out_alpha = self.softmax(self.output_layer_alpha(x))
-
-        # get activate of upper triangle U vector
-        U_vec = self.output_layer_U(x)
-        # prelocate U matrix
-        U_mat = Variable(torch.zeros(batch_size, self.n_components, self.ndims, self.ndims))
-
-        # assign vector to upper triangle of U
-        (idx1, idx2) = np.triu_indices(self.ndims)  # get indices of upper triangle, including diagonal
-
-        U_mat[:, :, idx1, idx2] = U_vec.view(U_mat[:, :, idx1, idx2].size())
-
-        # apply exponential to get positive diagonal
-        (idx1, idx2) = np.diag_indices(self.ndims)  # get indices of diagonal elements
-        U_mat[:, :, idx1, idx2] = torch.exp(U_mat[:, :, idx1, idx2])  # apply exponential to diagonal
-
-        return out_mu, U_mat, out_alpha
-
-    def loss(self, model_params, y):
-
-        mu, U, alpha = model_params
-
-        batch_mog = PytorchMultivariateMoG(mu, U, alpha)
-        result = batch_mog.pdf(y, log=True)
-
-        result = torch.mean(result)  # mean over batch
-
-        return -result
-
-    def predict(self, sx):
-        """
-        Take input sx and predict the corresponding posterior over parameters
-        :param sx: shape (n_samples, n_features), e.g., for single sx (1, n_stats)
-        :return: pytorch univariate MoG
-        """
-        if not isinstance(sx, Variable):
-            sx = Variable(torch.Tensor(sx))
-
-        assert sx.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
-
-        out_mu, U_mat, out_alpha = self.forward(sx)
-
-        return PytorchMultivariateMoG(out_mu, U_mat, out_alpha)
-
-
-class ClassificationMDN(nn.Module):
-
-    def __init__(self, n_input=2, n_output=2, n_hidden_units=10, n_hidden_layers=1):
-        super(ClassificationMDN, self).__init__()
-
-        self.n_hidden_layers = n_hidden_layers
-
-        # define funs
-        self.softmax = nn.Softmax(dim=1)
-        self.activation_fun = nn.Tanh()
-        self.loss = nn.CrossEntropyLoss()
-
-        # define architecture
-        # input layer takes features, expands to n_hidden units
-        self.input_layer = nn.Linear(n_input, n_hidden_units)
-        # middle layer takes activates, passes fully connected to next layer
-        # take arbitrary number of hidden layers:
-        self.hidden_layers = nn.ModuleList()
-        for _ in range(self.n_hidden_layers):
-            self.hidden_layers.append(nn.Linear(n_hidden_units, n_hidden_units))
-
-        # last layer takes activation, maps to output vectors, applies activation function and softmax for normalization
-        self.output_layer = nn.Linear(n_hidden_units, n_output)
-
-    def forward(self, x):
-        assert x.dim() == 2
-        # batch_size, n_features = x.size()
-
-        # forward path
-        # input layer, pass x and calculate activations
-        x = self.activation_fun(self.input_layer(x))
-
-        # iterate n hidden layers, input x and calculate tanh activation
-        for layer in self.hidden_layers:
-            x = self.activation_fun(layer(x))
-
-        # in the last layer, apply softmax
-        p_hat = self.softmax(self.output_layer(x))
-
-        return p_hat
-
-    def predict(self, x):
-        if not isinstance(x, Variable):
-            x = Variable(torch.Tensor(x))
-
-        assert x.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
-
-        p_vec = self.forward(x)
-
-
-        return p_vec.data.numpy().squeeze()
-
-
-# keep this class for backwards compability.
-class ClassificationSingleLayerMDN(nn.Module):
-
-    def __init__(self, ndim_input=2, ndim_output=2, n_hidden=5):
-        super(ClassificationSingleLayerMDN, self).__init__()
-
-        self.fc_in = nn.Linear(ndim_input, n_hidden)
-        self.tanh = nn.Tanh()
-        self.m_out = nn.Linear(n_hidden, ndim_output)
-
-        self.loss = nn.CrossEntropyLoss()
-        # the softmax is taken over the second dimension, given that the input x is (n_samples, n_features)
-        self.softmax = nn.Softmax(dim=1)
-
-    def forward(self, x):
-        # make sure x has n samples in rows and features in columns: x is (n_samples, n_features)
-        assert x.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
-        out = self.fc_in(x)
-        act = self.tanh(out)
-        out_m = self.softmax(self.m_out(act))
-
-        return out_m
-
-    def predict(self, sx):
-        if not isinstance(sx, Variable):
-            sx = Variable(torch.Tensor(sx))
-
-        assert sx.dim() == 2, 'the input should be 2D: (n_samples, n_features)'
-
-        p_vec = self.forward(sx)
-
-        return p_vec.data.numpy().squeeze()
+def my_log_sum_exp(x, axis=None):
+    """
+    Apply log-sum-exp with subtraction of the largest element to improve numerical stability.
+    """
+    (x_max, idx) = torch.max(x, dim=axis, keepdim=True)
+
+    return torch.log(torch.sum(torch.exp(x - x_max), dim=axis, keepdim=True)) + x_max
+
+
+def multivariate_normal_pdf(X, mus, Us, log=False):
+    """
+    Calculate pdf values for a batch of 2D Gaussian samples given mean and Choleski transform of the precision matrix.
+
+    Parameters
+    ----------
+    X : Pytorch Varibale containing a Tensor
+        batch of samples, shape (batch_size, ndims)
+    mus : Pytorch Varibale containing a Tensor
+        means for every sample, shape (batch_size, ndims)
+    Us: Pytorch Varibale containing a Tensor
+        Choleski transform of precision matrix for every sample, shape (batch_size, ndims, ndims)
+    log: bool
+      if True, log probs are returned
+
+    Returns
+    -------
+    result:  Variable containing a Tensor with shape (batch_size, 1)
+        batch of density values, if log=True log probs
+    """
+
+    # dimension of the Gaussian
+    D = mus.size()[1]
+
+    # get the precision matrices over batches using matrix multiplication: S^-1 = U'U
+    Sin = torch.bmm(torch.transpose(Us, 1, 2), Us)
+
+    # use torch.bmm to calculate probs over batch vectorized
+    log_probs = - 0.5 * torch.sum((X - mus).unsqueeze(-1) * torch.bmm(Sin, (X - mus).unsqueeze(-1)), dim=1)
+    # calculate normalization constant over batch extracting the diagonal of U manually
+    norm_const = (torch.sum(torch.log(Us[:, np.arange(D), np.arange(D)]), -1) - (D / 2) * np.log(2 * np.pi)).unsqueeze(
+        -1)
+
+    result = norm_const + log_probs
+
+    if log:
+        return result
+    else:
+        return torch.exp(result)

@@ -10,7 +10,7 @@ from scipy.stats import gamma
 import scipy
 from scipy.special import gammaln
 
-from model_comparison.utils import *
+from model_comparison.helpers import *
 
 
 def generate_dataset(n_samples, sample_size):

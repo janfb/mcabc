@@ -1,10 +1,19 @@
+import numpy as np
+import os
 import pickle
+import scipy
 import time
+import torch
+import torch.nn as nn
 import tqdm
 
-from model_comparison.utils import *
-from model_comparison.mdns import ClassificationSingleLayerMDN, Trainer
-from scipy.stats import gamma, beta, nbinom, poisson
+from torch.autograd import Variable
+from model_comparison.utils.processing import normalize, calculate_stats_toy_examples, generate_poisson_nb_data_set, calculate_mse
+
+from model_comparison.utils.stats import calculate_nb_evidence, calculate_pprob_from_evidences, poisson_evidence
+from model_comparison.mdn.Trainer import Trainer
+from model_comparison.mdn.MixtureDensityNetwork import ClassificationSingleLayerMDN
+from scipy.stats import gamma
 
 
 def do_poisson_nb_comparison(shape_lambda, shape_k, shape_theta, scale_k, scale_theta, seed, matched_means=False,

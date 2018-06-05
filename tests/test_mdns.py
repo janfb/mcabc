@@ -1,7 +1,11 @@
+import numpy as np
 import scipy.stats
+import torch
 
-from model_comparison.utils import *
-from model_comparison.mdns import *
+from model_comparison.utils.processing import generate_nd_gaussian_dataset, normalize, sample_poisson, \
+    calculate_stats_toy_examples, sample_poisson_gamma_mixture
+from model_comparison.mdn.MixtureDensityNetwork import MultivariateMogMDN, UnivariateMogMDN, ClassificationMDN
+from model_comparison.mdn.Trainer import Trainer
 
 from unittest import TestCase
 
@@ -40,8 +44,13 @@ class TestMDNs(TestCase):
         loss_trace = trainer.train(X, theta, n_epochs=10, n_minibatch=10)
 
     def test_posterior_fitting_univariate_mog(self):
-
+        """
+        Test with fitting a MoG to a posterior over the Poisson rate parameter of a Poisson model
+        :return:
+        """
+        # set up conjugate Gamma prior
         gamma_prior = scipy.stats.gamma(a=2., scale=5.)
+        # get data
         thetas, x = sample_poisson(gamma_prior, n_samples=100, sample_size=10)
         sx = calculate_stats_toy_examples(x)
         sx, norm = normalize(sx)
@@ -55,14 +64,16 @@ class TestMDNs(TestCase):
         loss_trace = trainer.train(sx, thetas, n_epochs=10, n_minibatch=10)
 
     def test_classification_mdn(self):
+        """
+        Test the model comparison posterior approximation
+        :return:
+        """
 
+        # set params
         sample_size = 10
         n_samples = 100
 
-        # set RNG
-        seed = 2
-        np.random.seed(seed)
-
+        # prior hyperparams
         k1 = 9.0
         theta2 = 2.0
         k2 = 5.
@@ -78,7 +89,6 @@ class TestMDNs(TestCase):
         prior_theta = scipy.stats.gamma(a=k3, scale=theta3)
 
         # generate a large data set for training
-
         X = []
         thetas = []
         m = []
@@ -179,7 +189,5 @@ class TestMDNs(TestCase):
         # just test the outer edges and the mean
         ns = 10
         ss = pp.gen(ns)
-
-        print(ss)
 
         assert ss.shape == (ns, 2), 'samples shape have shape ({}, 2), have {}'.format(ns, ss.shape)

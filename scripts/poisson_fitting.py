@@ -8,7 +8,7 @@ from random import shuffle
 from scipy.stats import gamma
 import scipy.special
 
-from model_comparison.utils import *
+from model_comparison.helpers import *
 
 class MDN_phi(nn.Module):
     def __init__(self, ndim_input=1, ndim_output=1, n_hidden=5, n_components=1):

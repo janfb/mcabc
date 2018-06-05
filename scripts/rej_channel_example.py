@@ -2,7 +2,7 @@ import pickle
 import sys
 import time
 sys.path.append('../../')
-from model_comparison.utils import *
+from model_comparison.helpers import *
 from model_comparison.mdns import *
 
 GT = {'kd': np.array([[4, -63, 0.032, 15, 5, 0.5, 10, 40]]),
