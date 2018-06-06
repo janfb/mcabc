@@ -32,4 +32,6 @@ You find a jupyter notebook in the ``examples`` folder presenting the methods on
 example problem: Bayesian model comparison between a Poisson model and a negative binomial model. 
 More examples will follow soon. 
 
+The examples can be found on binder as well: [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/janfb/mcabc/master?filepath=https%3A%2F%2Fgithub.com%2Fjanfb%2Fmcabc%2Fblob%2Fmaster%2Fexamples%2FModelComparison_Poisson_NegativeBinomial.ipynb)
+
 Please let me know if you have questions or suggestions. 
