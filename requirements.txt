@@ -20,7 +20,6 @@ jupyter-core==4.4.0
 kiwisolver==1.0.1
 MarkupSafe==1.0
 matplotlib==2.2.2
--e git+git@github.com:janfb/mcabc.git@5c74ca14dc77def27f307caf3b20ce2c27f1cd7b#egg=mcabc
 mistune==0.8.3
 nbconvert==5.3.1
 nbformat==4.4.0
