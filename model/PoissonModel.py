@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.stats
 
-from model_comparison.model.BaseModel import BaseModel
+from mcabc.model.BaseModel import BaseModel
 
 
 class PoissonModel(BaseModel):

@@ -2,10 +2,10 @@ import numpy as np
 import scipy.stats
 import torch
 
-from model_comparison.utils.processing import generate_nd_gaussian_dataset, normalize, sample_poisson, \
+from mcabc.utils.processing import generate_nd_gaussian_dataset, normalize, sample_poisson, \
     calculate_stats_toy_examples, sample_poisson_gamma_mixture
-from model_comparison.mdn.MixtureDensityNetwork import MultivariateMogMDN, UnivariateMogMDN, ClassificationMDN
-from model_comparison.mdn.Trainer import Trainer
+from mcabc.mdn.MixtureDensityNetwork import MultivariateMogMDN, UnivariateMogMDN, ClassificationMDN
+from mcabc.mdn.Trainer import Trainer
 
 from unittest import TestCase
 

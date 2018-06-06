@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from torch.autograd import Variable
-from model_comparison.mdn.PyTorchDistributions import PytorchMultivariateMoG, PytorchUnivariateMoG
+from mcabc.mdn.PyTorchDistributions import PytorchMultivariateMoG, PytorchUnivariateMoG
 
 
 class UnivariateMogMDN(nn.Module):
