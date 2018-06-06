@@ -15,6 +15,5 @@ setup(
     packages=['mcabc', 'mcabc.mdn', 'mcabc.model', 'mcabc.utils', 'tests'],
     license='MIT',
     long_description=read('README.md'),
-    install_requires=['numpy', 'scipy', 'tqdm', 'torch', 'delfi', 'matplotlib', 'jupyter', 'lasagne==0.2.dev1'],
-    dependency_links=[ 'https://github.com/Lasagne/Lasagne/archive/master.zip#egg=lasagne-0.2.dev1',]
+    install_requires=['numpy', 'scipy', 'tqdm', 'torch', 'delfi', 'matplotlib', 'jupyter']
 )
