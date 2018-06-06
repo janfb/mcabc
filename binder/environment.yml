@@ -1,0 +1,13 @@
+name: plain
+channels:
+  - defaults
+dependencies:
+  - pip:
+    - matplotlib==2.2.2 
+    - numpy==1.14.3
+    - scipy==1.1.0
+    - torch==0.4.0
+    - tqdm==4.23.4
+    - git+https://github.com/janfb/mcabc.git
+prefix: /home/boelts/anaconda3/envs/plain
+
