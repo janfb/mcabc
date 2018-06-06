@@ -17,7 +17,11 @@ Clone the repository. Then, in the repository root folder, run
 
     python setup.py install --user 
     
-to install all required packages. To test whether everything worked out fine, run 
+to install all required packages. Alternatively, you install it via ``pip`` using 
+
+    pip install git+https://github.com/janfb/mcabc.git --process-dependency-links
+
+To test whether everything worked out fine, run 
 
     nosetests tests/
     
