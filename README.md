@@ -1,4 +1,5 @@
 # mcabc
+[![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/janfb/mcabc/master?filepath=https%3A%2F%2Fgithub.com%2Fjanfb%2Fmcabc%2Fblob%2Fmaster%2Fexamples%2FModelComparison_Poisson_NegativeBinomial.ipynb)
 Model Comparison In Approximate Bayesian Computation
 
 **mcabc** is a Python package for performing model comparison in Approximate Bayesian Computation. 
