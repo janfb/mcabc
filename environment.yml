@@ -82,7 +82,7 @@ dependencies:
   - zlib=1.2.11=ha838bed_2
   - pip:
     - cycler==0.10.0
-    - delfi==0.4.1 --user --process-dependency-links
+    - delfi --user --process-dependency-links
     - kiwisolver==1.0.1
     - matplotlib==2.2.2 
     - neuron==7.4
@@ -92,5 +92,6 @@ dependencies:
     - scipy==1.1.0
     - torch==0.4.0
     - tqdm==4.23.4
+    - git+https://github.com/janfb/mcabc.git
 prefix: /home/boelts/anaconda3/envs/plain
 
