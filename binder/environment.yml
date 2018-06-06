@@ -8,6 +8,6 @@ dependencies:
     - scipy==1.1.0
     - torch==0.4.0
     - tqdm==4.23.4
-    - git+https://github.com/janfb/mcabc.git
+    - git+https://github.com/janfb/mcabc.git --process-dependency-links
 prefix: /home/boelts/anaconda3/envs/plain
 
