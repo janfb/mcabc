@@ -15,6 +15,6 @@ setup(
     packages=['mcabc', 'mcabc.mdn', 'mcabc.model', 'mcabc.utils', 'tests'],
     license='MIT',
     long_description=read('README.md'),
-    install_requires=['numpy', 'scipy', 'tqdm', 'torch==0.4.0'],
+    install_requires=['numpy', 'scipy', 'tqdm', 'torch'],
     dependency_links=[]
 )
