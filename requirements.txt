@@ -1,6 +1,0 @@
-certifi==2018.4.16
--e git+git@github.com:janfb/mcabc.git@94e7f4423087859351663e8acfb3213e1d7b3568#egg=mcabc
-numpy==1.14.3
-scipy==1.1.0
-torch==0.4.0
-tqdm==4.23.4
