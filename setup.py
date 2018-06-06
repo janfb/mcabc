@@ -12,9 +12,9 @@ setup(
     description='Model Comparison in Approximate Bayesian Computation',
     url='https://github.com/janfb/mcabc',
     author='janfb',
-    packages=['mcabc', 'mcabc.mdn', 'mcabc.model', 'mcabc.tests', 'mcabc.utils'],
+    packages=['mcabc', 'mcabc.mdn', 'mcabc.model', 'mcabc.utils', 'tests'],
     license='MIT',
-    long_description=read('README'),
-    install_requires=['numpy', 'scipy', 'tqdm', 'multiprocessing', 'torch', 'random'],
+    long_description=read('README.md'),
+    install_requires=['numpy', 'scipy', 'tqdm', 'torch==0.4.0'],
     dependency_links=[]
 )
